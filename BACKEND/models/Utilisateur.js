@@ -1,48 +1,74 @@
+// BACKEND/models/Utilisateur.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 
-const utilisateurSchema = new mongoose.Schema(
+const UtilisateurSchema = new mongoose.Schema(
   {
-    nom: { type: String, required: true },
-    prenom: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    nom: { type: String, required: true, trim: true },
+    prenom: { type: String, required: true, trim: true },
+
+    // unique:true crée déjà l'index — pas besoin de schema.index()
+    email: {
+      type: String,
+      required: true,
+      unique: true, // ← ceci suffit, pas besoin de index:true en plus
+      lowercase: true,
+      trim: true,
+    },
+
     mot_de_passe: {
       type: String,
       required: true,
-      minlength: [8, 'Le mot de passe doit contenir au moins 8 caractères'],
+      select: false,
+      minlength: 8,
     },
+
     role: {
       type: String,
-      enum: ['ADMINISTRATEUR', 'ETUDIANT', 'ENCADRANT'],
-      required: true,
+      enum: ['ETUDIANT', 'ENCADRANT', 'ADMINISTRATEUR'],
+      default: 'ETUDIANT',
     },
-    telephone: String,
-    image: String,
-    resetToken: String,
-    resetTokenExpire: Date,
+
+    telephone: { type: String, default: '' },
+    image: { type: String, default: '' },
+    linkedin: { type: String, default: '' },
+    portfolio: { type: String, default: '' },
+
+    // Conservé pour compatibilité, mais l'inscription valide directement le compte
+    isValidated: { type: Boolean, default: true },
+
+    // Code de référence utilisé lors de l'inscription
+    // Matricule pour ETUDIANT, Code contrat pour ENCADRANT
+    codeReference: { type: String, default: '' },
+
+    // Refresh token — HTTP-Only cookie
+    refreshToken: {
+      type: String,
+      select: false,
+    },
+    refreshTokenExpiry: {
+      type: Date,
+      select: false,
+    },
+
+    // Reset mot de passe
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpiry: {
+      type: Date,
+      select: false,
+    },
+
+    lastLogin: { type: Date },
+    isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Hachage mot de passe avant sauvegarde
+// ── Un seul index explicite sur role (email est déjà indexé via unique:true) ──
+UtilisateurSchema.index({ role: 1 });
 
-utilisateurSchema.pre('save', async function () {
-  if (!this.isModified('mot_de_passe')) return;
-  this.mot_de_passe = await bcrypt.hash(this.mot_de_passe, 10);
-});
-
-// Vérifier mot de passe
-utilisateurSchema.methods.matchPassword = async function (password) {
-  return bcrypt.compare(password, this.mot_de_passe);
-};
-
-// Générer token réinitialisation
-utilisateurSchema.methods.getResetToken = function () {
-  const resetToken = crypto.randomBytes(20).toString('hex');
-  this.resetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-  this.resetTokenExpire = Date.now() + 10 * 60 * 1000;
-  return resetToken;
-};
-
-module.exports = mongoose.model('Utilisateur', utilisateurSchema);
+module.exports = mongoose.model('Utilisateur', UtilisateurSchema);

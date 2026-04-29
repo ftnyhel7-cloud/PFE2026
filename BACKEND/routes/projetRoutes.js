@@ -32,9 +32,8 @@ router.get('/mon-projet', protect, authorizeRoles('ETUDIANT'), monProjet);
 router.get('/encadrant/:encadrantId', protect, authorizeRoles('ENCADRANT'), projetEncadrant);
 
 // POST http://localhost:5000/api/projets
-// Créer un projet
-// Seulement l'administrateur
-router.post('/', protect, authorizeRoles('ADMINISTRATEUR'), creerProjet);
+// Créer un projet (admin ou encadrant)
+router.post('/', protect, authorizeRoles('ADMINISTRATEUR', 'ENCADRANT'), creerProjet);
 
 // PUT http://localhost:5000/api/projets/:id/statut
 // Changer le statut du projet

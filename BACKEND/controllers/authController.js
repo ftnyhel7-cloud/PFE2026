@@ -1,14 +1,57 @@
+// ═══════════════════════════════════════════════════════════
+//  BACKEND/controllers/authController.js
+//  Authentification JWT — Access Token + Refresh Token
+//  Rôles : ETUDIANT | ENCADRANT | ADMINISTRATEUR
+//  + Validation référentiel + Logs
+// ═══════════════════════════════════════════════════════════
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const Utilisateur = require('../models/Utilisateur');
 const Etudiant = require('../models/Etudiant');
 const Encadrant = require('../models/Encadrant');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
+const Referentiel = require('../models/Referentiel');
+const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
+const { logAction, getClientIp } = require('../utils/logger');
 
-// ─── Générer Token JWT ───────────────────────────────
-const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+// ─────────────────────────────────────────────────────────
+//  HELPERS : génération des tokens
+// ─────────────────────────────────────────────────────────
+const genAccessToken = (user) =>
+  jwt.sign({ id: user._id, role: user.role, email: user.email }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m',
+  });
 
-// ─── INSCRIPTION ────────────────────────────────────
+const genRefreshToken = (user) =>
+  jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d',
+  });
+
+const setRefreshCookie = (res, token) => {
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/api/auth/refresh-token',
+  });
+};
+
+const formatUser = (user) => ({
+  _id: user._id,
+  nom: user.nom,
+  prenom: user.prenom,
+  email: user.email,
+  role: user.role,
+  telephone: user.telephone || '',
+  image: user.image || '',
+  isValidated: user.isValidated,
+});
+
+// ─────────────────────────────────────────────────────────
+//  INSCRIPTION — avec vérification référentiel
+// ─────────────────────────────────────────────────────────
 exports.register = async (req, res) => {
   try {
     const {
@@ -16,7 +59,8 @@ exports.register = async (req, res) => {
       prenom,
       email,
       mot_de_passe,
-      role,
+      role = 'ETUDIANT',
+      telephone,
       filiere,
       matricule,
       niveau,
@@ -24,202 +68,449 @@ exports.register = async (req, res) => {
       specialite,
       departement,
       typeEncadrant,
+      codeReference,
     } = req.body;
 
-    // 1. Email déjà utilisé ?
-    const existe = await Utilisateur.findOne({ email });
-    if (existe) {
-      return res.status(400).json({ message: 'Email déjà utilisé' });
+    if (!nom || !prenom || !email || !mot_de_passe) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Nom, prénom, email et mot de passe sont obligatoires' });
     }
 
-    // 2. Créer l'utilisateur
-    const user = await Utilisateur.create({
-      nom,
-      prenom,
-      email,
-      mot_de_passe,
-      role,
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ status: 'error', message: "Format d'email invalide" });
+    }
+
+    if (mot_de_passe.length < 8) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Le mot de passe doit contenir au moins 8 caractères' });
+    }
+
+    const existant = await Utilisateur.findOne({ email: email.toLowerCase().trim() });
+    if (existant) {
+      return res
+        .status(409)
+        .json({ status: 'error', message: 'Un compte avec cet email existe déjà' });
+    }
+
+    const rolesValides = ['ETUDIANT', 'ENCADRANT'];
+    if (!rolesValides.includes(role)) {
+      return res
+        .status(400)
+        .json({
+          status: 'error',
+          message: 'Rôle invalide. Valeurs acceptées : ETUDIANT, ENCADRANT',
+        });
+    }
+
+    const codeAVerifier = codeReference || (role === 'ETUDIANT' ? matricule : matriculeProf);
+
+    if (!codeAVerifier) {
+      return res.status(400).json({
+        status: 'error',
+        message:
+          role === 'ETUDIANT'
+            ? 'Le matricule étudiant est obligatoire'
+            : 'Le code contrat (matricule prof) est obligatoire',
+      });
+    }
+
+    const typeRef = role === 'ETUDIANT' ? 'ETUDIANT' : 'ENCADRANT';
+    const refEntry = await Referentiel.findOne({
+      type: typeRef,
+      code: codeAVerifier.toUpperCase().trim(),
     });
 
-    // 3. Créer le profil selon le rôle
+    if (!refEntry) {
+      return res.status(403).json({
+        status: 'error',
+        message: `Code non autorisé. Votre ${role === 'ETUDIANT' ? 'matricule' : 'code contrat'} n'existe pas dans le référentiel. Contactez l'administration.`,
+      });
+    }
+
+    if (refEntry.utilise) {
+      return res
+        .status(409)
+        .json({ status: 'error', message: 'Ce code a déjà été utilisé pour une inscription.' });
+    }
+
+    const motDePasseHache = await bcrypt.hash(mot_de_passe, 12);
+
+    const utilisateur = await Utilisateur.create({
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      email: email.toLowerCase().trim(),
+      mot_de_passe: motDePasseHache,
+      role,
+      telephone: telephone || '',
+      isValidated: true,
+      codeReference: codeAVerifier.toUpperCase().trim(),
+    });
+
     if (role === 'ETUDIANT') {
       await Etudiant.create({
-        utilisateur: user._id,
-        filiere,
-        matricule,
-        niveau,
+        utilisateur: utilisateur._id,
+        filiere: filiere || '',
+        matricule: codeAVerifier.toUpperCase().trim(),
+        niveau: niveau || '',
+        statutPFE: 'NON_AFFECTE',
       });
     }
 
     if (role === 'ENCADRANT') {
       await Encadrant.create({
-        utilisateur: user._id,
-        matriculeProf,
-        specialite,
-        departement,
-        typeEncadrant,
+        utilisateur: utilisateur._id,
+        matriculeProf: codeAVerifier.toUpperCase().trim(),
+        specialite: specialite || '',
+        departement: departement || '',
+        typeEncadrant: typeEncadrant || 'Academique',
+        disponibilite: true,
       });
     }
 
-    // 4. Répondre avec le token
-    res.status(201).json({
-      token: generateToken(user._id),
-      user: {
-        id: user._id,
-        nom: user.nom,
-        prenom: user.prenom,
-        email: user.email,
-        role: user.role,
-      },
+    await Referentiel.findByIdAndUpdate(refEntry._id, {
+      utilise: true,
+      utilisePar: utilisateur._id,
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    await logAction('REGISTER', {
+      userId: utilisateur._id,
+      userRole: role,
+      userEmail: utilisateur.email,
+      details: `Inscription ${role} — code: ${codeAVerifier}`,
+      ip: getClientIp(req),
+    });
+
+    try {
+      await sendEmail({
+        email: utilisateur.email,
+        subject: '[Project Finder] Bienvenue sur la plateforme !',
+        message: `Bonjour ${prenom} !\n\nVotre compte a été créé avec succès en tant que ${role}.\nVotre compte est actif. Vous pouvez vous connecter immédiatement.\n\nCordialement,\nL'équipe Project Finder`,
+      });
+    } catch (emailErr) {
+      console.error('Email bienvenue non envoyé:', emailErr.message);
+    }
+
+    return res.status(201).json({
+      status: 'success',
+      message: 'Compte créé avec succès. Vous pouvez vous connecter maintenant.',
+      user: formatUser(utilisateur),
+    });
+  } catch (error) {
+    console.error('Erreur register:', error);
+    return res
+      .status(500)
+      .json({ status: 'error', message: "Erreur serveur lors de l'inscription" });
   }
 };
 
-// ─── CONNEXION ──────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+//  CONNEXION
+// ─────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
 
-    // 1. Trouver l'utilisateur
-    const user = await Utilisateur.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: 'Email incorrect' });
+    if (!email || !mot_de_passe) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Email et mot de passe sont requis' });
     }
 
-    // 2. Vérifier mot de passe
-    const isMatch = await user.matchPassword(mot_de_passe);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Mot de passe incorrect' });
+    const utilisateur = await Utilisateur.findOne({
+      email: email.toLowerCase().trim(),
+    }).select('+mot_de_passe +refreshToken');
+
+    if (!utilisateur) {
+      return res.status(401).json({ status: 'error', message: 'Email ou mot de passe incorrect' });
     }
 
-    // 3. Répondre avec le token
-    res.json({
-      token: generateToken(user._id),
-      user: {
-        id: user._id,
-        nom: user.nom,
-        prenom: user.prenom,
-        email: user.email,
-        role: user.role,
-      },
+    const mdpValide = await bcrypt.compare(mot_de_passe, utilisateur.mot_de_passe);
+    if (!mdpValide) {
+      return res.status(401).json({ status: 'error', message: 'Email ou mot de passe incorrect' });
+    }
+
+    const accessToken = genAccessToken(utilisateur);
+    const refreshToken = genRefreshToken(utilisateur);
+
+    await Utilisateur.findByIdAndUpdate(utilisateur._id, {
+      refreshToken,
+      refreshTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      lastLogin: new Date(),
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    setRefreshCookie(res, refreshToken);
+
+    await logAction('LOGIN', {
+      userId: utilisateur._id,
+      userRole: utilisateur.role,
+      userEmail: utilisateur.email,
+      details: 'Connexion réussie',
+      ip: getClientIp(req),
+    });
+
+    // ── Récupérer UNIQUEMENT les notifications dont la popup
+    //    n'a pas encore été affichée (isPopupShown: false)
+    //    → après affichage, le frontend marque isPopupShown: true
+    //    → elles ne réapparaîtront plus aux prochaines connexions
+    const notificationsNonLues = await Notification.find({
+      idUtilisateur: utilisateur._id,
+      lu: false,
+      isPopupShown: false, // ← SEUL CHANGEMENT PAR RAPPORT À L'ORIGINAL
+    })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Connexion réussie',
+      accessToken,
+      user: formatUser(utilisateur),
+      popupNotifications: notificationsNonLues,
+    });
+  } catch (error) {
+    console.error('Erreur login:', error);
+    return res
+      .status(500)
+      .json({ status: 'error', message: 'Erreur serveur lors de la connexion' });
   }
 };
 
-// ─── MOT DE PASSE OUBLIÉ ────────────────────────────
-exports.forgotPassword = async (req, res) => {
+// ─────────────────────────────────────────────────────────
+//  RAFRAÎCHIR LE TOKEN
+// ─────────────────────────────────────────────────────────
+exports.refreshToken = async (req, res) => {
   try {
-    // 1. Trouver l'utilisateur
-    const user = await Utilisateur.findOne({ email: req.body.email });
-    if (!user) {
-      return res.status(404).json({ message: 'Aucun compte avec cet email' });
+    const token = req.cookies?.refreshToken;
+
+    if (!token) {
+      return res
+        .status(401)
+        .json({ status: 'error', message: 'Refresh token manquant — veuillez vous reconnecter' });
     }
 
-    // 2. Générer le token
-    const resetToken = user.getResetToken();
-    await user.save();
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+      return res.status(401).json({ status: 'error', message: 'Refresh token invalide ou expiré' });
+    }
 
-    // 3. Créer le lien
-    const resetUrl = `http://localhost:3000/reset-password/${resetToken}`;
+    const utilisateur = await Utilisateur.findById(decoded.id).select(
+      '+refreshToken +refreshTokenExpiry'
+    );
 
-    // 4. Envoyer l'email
-    const message = `
-      Bonjour ${user.nom},
+    if (!utilisateur || utilisateur.refreshToken !== token) {
+      return res
+        .status(401)
+        .json({ status: 'error', message: 'Session invalide — veuillez vous reconnecter' });
+    }
 
-      Vous avez demandé une réinitialisation de mot de passe.
-      Cliquez sur ce lien (valable 10 minutes) :
+    if (utilisateur.refreshTokenExpiry < new Date()) {
+      return res
+        .status(401)
+        .json({ status: 'error', message: 'Session expirée — veuillez vous reconnecter' });
+    }
 
-      ${resetUrl}
+    const newAccessToken = genAccessToken(utilisateur);
+    const newRefreshToken = genRefreshToken(utilisateur);
 
-      Si vous n'avez pas demandé ça, ignorez cet email.
-    `;
-
-    await sendEmail({
-      email: user.email,
-      subject: 'Réinitialisation de mot de passe',
-      message,
+    await Utilisateur.findByIdAndUpdate(utilisateur._id, {
+      refreshToken: newRefreshToken,
+      refreshTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
-    res.json({ message: 'Email envoyé avec succès' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    setRefreshCookie(res, newRefreshToken);
+
+    return res
+      .status(200)
+      .json({ status: 'success', accessToken: newAccessToken, user: formatUser(utilisateur) });
+  } catch (error) {
+    console.error('Erreur refreshToken:', error);
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
   }
 };
 
-// ─── RÉINITIALISER MOT DE PASSE ─────────────────────
-exports.resetPassword = async (req, res) => {
+// ─────────────────────────────────────────────────────────
+//  DÉCONNEXION
+// ─────────────────────────────────────────────────────────
+exports.logout = async (req, res) => {
   try {
-    // 1. Hacher le token reçu
-    const resetToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const token = req.cookies?.refreshToken;
 
-    // 2. Trouver l'utilisateur avec ce token
-    const user = await Utilisateur.findOne({
-      resetToken,
-      resetTokenExpire: { $gt: Date.now() },
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: 'Token invalide ou expiré' });
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+        await Utilisateur.findByIdAndUpdate(decoded.id, {
+          refreshToken: null,
+          refreshTokenExpiry: null,
+        });
+        await logAction('LOGOUT', {
+          userId: decoded.id,
+          details: 'Déconnexion',
+          ip: getClientIp(req),
+        });
+      } catch {}
     }
 
-    // 3. Changer le mot de passe
-    user.mot_de_passe = req.body.mot_de_passe;
-    user.resetToken = undefined;
-    user.resetTokenExpire = undefined;
-    await user.save();
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth/refresh-token',
+    });
 
-    res.json({ message: 'Mot de passe modifié avec succès' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(200).json({ status: 'success', message: 'Déconnexion réussie' });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
   }
 };
 
-// ─── MON PROFIL ─────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+//  MON PROFIL
+// ─────────────────────────────────────────────────────────
 exports.getProfile = async (req, res) => {
   try {
-    const user = await Utilisateur.findById(req.user._id).select('-mot_de_passe');
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    const user = await Utilisateur.findById(req.user._id).select(
+      '-mot_de_passe -refreshToken -refreshTokenExpiry'
+    );
+    if (!user) return res.status(404).json({ status: 'error', message: 'Utilisateur introuvable' });
+    return res.status(200).json({ status: 'success', user: formatUser(user) });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
   }
 };
 
-// ─── MODIFIER MON PROFIL ────────────────────────────
-// ─── MODIFIER PROFIL 
+// ─────────────────────────────────────────────────────────
+//  MODIFIER MON PROFIL
+// ─────────────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
   try {
     const { nom, prenom, telephone, image, mot_de_passe } = req.body;
 
-    // Si l'utilisateur veut changer son mot de passe
+    const updateData = {};
+    if (nom) updateData.nom = nom.trim();
+    if (prenom) updateData.prenom = prenom.trim();
+    if (telephone) updateData.telephone = telephone;
+    if (image) updateData.image = image;
+
     if (mot_de_passe) {
-      // On récupère l'utilisateur complet
-      const user = await Utilisateur.findById(req.user._id);
-      // On assigne le nouveau mot de passe
-      user.mot_de_passe = mot_de_passe;
-      // Le pre('save') va automatiquement hacher le mot de passe
-      await user.save();
+      if (mot_de_passe.length < 8) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'Mot de passe trop court (min 8 car.)' });
+      }
+      updateData.mot_de_passe = await bcrypt.hash(mot_de_passe, 12);
     }
 
-    // On prépare les données à mettre à jour
-    const updateData = {};
-    if (nom)       updateData.nom       = nom;
-    if (prenom)    updateData.prenom    = prenom;
-    if (telephone) updateData.telephone = telephone;
-    if (image)     updateData.image     = image;
+    const user = await Utilisateur.findByIdAndUpdate(req.user._id, updateData, {
+      new: true,
+    }).select('-mot_de_passe -refreshToken');
 
-    // On met à jour l'utilisateur
-    const user = await Utilisateur.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true }
-    ).select('-mot_de_passe'); // ne retourne pas le mot de passe
+    await logAction('UPDATE_PROFILE', {
+      userId: req.user._id,
+      userRole: req.user.role,
+      userEmail: req.user.email,
+      details: 'Mise à jour du profil',
+      ip: getClientIp(req),
+    });
 
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res
+      .status(200)
+      .json({ status: 'success', message: 'Profil mis à jour', user: formatUser(user) });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────
+//  MOT DE PASSE OUBLIÉ
+// ─────────────────────────────────────────────────────────
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ status: 'error', message: 'Email requis' });
+
+    const user = await Utilisateur.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res
+        .status(200)
+        .json({
+          status: 'success',
+          message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
+        });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    await Utilisateur.findByIdAndUpdate(user._id, {
+      resetPasswordToken: resetHash,
+      resetPasswordExpiry: new Date(Date.now() + 30 * 60 * 1000),
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: '[Project Finder] Réinitialisation de mot de passe',
+        message: `Bonjour ${user.prenom},\n\nUne demande de réinitialisation de mot de passe a été effectuée.\n\nCliquez sur ce lien (valable 30 minutes) :\n${resetUrl}\n\nSi vous n'avez pas fait cette demande, ignorez cet email.\n\nCordialement,\nL'équipe Project Finder`,
+      });
+    } catch (emailErr) {
+      console.error('Email reset non envoyé:', emailErr.message);
+    }
+
+    return res
+      .status(200)
+      .json({
+        status: 'success',
+        message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
+      });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────
+//  RÉINITIALISER LE MOT DE PASSE
+// ─────────────────────────────────────────────────────────
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { mot_de_passe } = req.body;
+
+    if (!mot_de_passe || mot_de_passe.length < 8) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Mot de passe trop court (min 8 car.)' });
+    }
+
+    const resetHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await Utilisateur.findOne({
+      resetPasswordToken: resetHash,
+      resetPasswordExpiry: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ status: 'error', message: 'Lien invalide ou expiré' });
+    }
+
+    await Utilisateur.findByIdAndUpdate(user._id, {
+      mot_de_passe: await bcrypt.hash(mot_de_passe, 12),
+      resetPasswordToken: null,
+      resetPasswordExpiry: null,
+      refreshToken: null,
+    });
+
+    return res
+      .status(200)
+      .json({ status: 'success', message: 'Mot de passe réinitialisé avec succès' });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
   }
 };

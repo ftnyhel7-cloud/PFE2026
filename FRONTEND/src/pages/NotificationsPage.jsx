@@ -1,111 +1,161 @@
-import { useState } from 'react';
+// ═══════════════════════════════════════════════════════════
+//  FRONTEND/src/pages/NotificationsPage.jsx
+//  Notifications réelles depuis l'API
+//  Les popups s'enregistrent automatiquement ici
+// ═══════════════════════════════════════════════════════════
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import API from '../api/axios';
 
 const TEAL = '#1a7a8a';
 const YELLOW = '#F5C518';
 const DARK = '#0d1f30';
 
-const FAKE_NOTIFS = [
-  {
-    id: 1,
-    type: 'ACCEPTE',
-    titre: 'Candidature acceptee !',
-    message:
-      'Felicitations ! Votre candidature pour "Plateforme MERN de gestion PFE" a ete acceptee par Prof. Mohamed Hammami.',
-    date: '2026-04-15 10:30',
-    lu: false,
-  },
-  {
-    id: 2,
-    type: 'INTERVIEW',
-    titre: 'Invitation a un entretien',
-    message:
-      'Vous etes convoque pour un entretien concernant le sujet "Dashboard analytique IoT". Date : 20 Avril 2026 a 14h00. Lien : https://meet.google.com/abc-xyz',
-    date: '2026-04-14 15:20',
-    lu: false,
-  },
-  {
-    id: 3,
-    type: 'QUIZ',
-    titre: 'Quiz de selection requis',
-    message:
-      'En raison du grand nombre de candidats pour "Detection de fraude bancaire par IA", un quiz de selection vous a ete assigne. Duree : 30 minutes.',
-    date: '2026-04-13 09:15',
-    lu: true,
-  },
-  {
-    id: 4,
-    type: 'REFUSE',
-    titre: 'Candidature non retenue',
-    message:
-      'Nous vous remercions pour votre interet pour le sujet "Chatbot NLP". Votre candidature n\'a pas ete retenue cette fois. Continuez a postuler !',
-    date: '2026-04-12 16:45',
-    lu: true,
-  },
-  {
-    id: 5,
-    type: 'INFO',
-    titre: 'Nouveau sujet disponible',
-    message:
-      '5 nouveaux sujets PFE ont ete ajoutes a la plateforme. Consultez-les et postulez avant la date limite !',
-    date: '2026-04-11 08:00',
-    lu: true,
-  },
-  {
-    id: 6,
-    type: 'CANDIDATURE',
-    titre: 'Candidature recue',
-    message:
-      'Votre candidature pour "Application mobile e-commerce" a bien ete recue. Score IA : 78/100. Vous serez contacte prochainement.',
-    date: '2026-04-10 11:30',
-    lu: true,
-  },
-];
-
 const TYPE_CONFIG = {
-  ACCEPTE: { icon: '🎉', color: '#27AE60', bg: 'rgba(39,174,96,.1)', label: 'Accepte' },
-  REFUSE: { icon: '❌', color: '#E74C3C', bg: 'rgba(231,76,60,.1)', label: 'Refuse' },
+  VALIDATION: { icon: '✅', color: '#27AE60', bg: 'rgba(39,174,96,.1)', label: 'Validation' },
+  TACHE: { icon: '📋', color: '#d97706', bg: 'rgba(217,119,6,.1)', label: 'Tâche' },
+  REUNION: { icon: '📅', color: '#7c3aed', bg: 'rgba(124,58,237,.1)', label: 'Réunion' },
+  LIVRABLE: { icon: '📦', color: '#0284c7', bg: 'rgba(2,132,199,.1)', label: 'Livrable' },
+  SYSTEME: { icon: '📢', color: TEAL, bg: 'rgba(26,122,138,.1)', label: 'Système' },
+  AFFECTATION: { icon: '🔗', color: '#db2777', bg: 'rgba(219,39,119,.1)', label: 'Affectation' },
+  // Types legacy page fake
+  ACCEPTE: { icon: '🎉', color: '#27AE60', bg: 'rgba(39,174,96,.1)', label: 'Accepté' },
+  REFUSE: { icon: '❌', color: '#E74C3C', bg: 'rgba(231,76,60,.1)', label: 'Refusé' },
   INTERVIEW: { icon: '🎤', color: '#2980B9', bg: 'rgba(41,128,185,.1)', label: 'Entretien' },
   QUIZ: { icon: '📝', color: '#9B59B6', bg: 'rgba(155,89,182,.1)', label: 'Quiz' },
   CANDIDATURE: { icon: '📨', color: TEAL, bg: 'rgba(26,122,138,.1)', label: 'Candidature' },
   INFO: { icon: 'ℹ️', color: '#E67E22', bg: 'rgba(230,126,34,.1)', label: 'Info' },
 };
 
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+  * { box-sizing:border-box; margin:0; padding:0; }
+
+  .hexshape { clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); }
+
+  .notif-card {
+    background:#fff; border-radius:14px; padding:1.25rem 1.5rem;
+    margin-bottom:.85rem; box-shadow:0 2px 10px rgba(0,0,0,.05);
+    border:1.5px solid #eee; transition:all .2s; cursor:pointer;
+  }
+  .notif-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.09); transform:translateY(-1px); }
+  .notif-card.unread { border-left:4px solid ${TEAL}; }
+
+  .filter-btn {
+    padding:.45rem 1rem; border-radius:100px; border:1.5px solid #e0e0e0;
+    background:#fff; cursor:pointer; font-size:.8rem; font-weight:600;
+    transition:all .2s; font-family:Poppins,sans-serif; color:#666;
+  }
+  .filter-btn.on { background:${TEAL}; color:#fff; border-color:${TEAL}; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .spinner {
+    width:36px; height:36px; border:3px solid #e2e8f0;
+    border-top-color:${TEAL}; border-radius:50%;
+    animation:spin .8s linear infinite; margin:3rem auto;
+  }
+
+  /* Badge popup */
+  .popup-badge {
+    display:inline-flex; align-items:center; gap:.3rem;
+    background:#e6f4f6; color:${TEAL}; border:1px solid #b2d8de;
+    border-radius:999px; font-size:.65rem; font-weight:700;
+    padding:.12rem .55rem; margin-left:.5rem;
+  }
+`;
+
 export default function NotificationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState(FAKE_NOTIFS);
+
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState('Toutes');
+  const [error, setError] = useState('');
 
   const nonLues = notifs.filter((n) => !n.lu).length;
 
-  const marquerLue = (id) =>
-    setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, lu: true } : n)));
-  const marquerToutesLues = () => setNotifs((prev) => prev.map((n) => ({ ...n, lu: true })));
-  const supprimer = (id) => setNotifs((prev) => prev.filter((n) => n.id !== id));
+  // ── Charger toutes les notifications depuis l'API ───────
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
 
-  const filtres = ['Toutes', 'Non lues', 'ACCEPTE', 'INTERVIEW', 'QUIZ', 'REFUSE', 'INFO'];
+  const fetchNotifications = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await API.get('/notifications');
+      // data peut être un tableau direct ou { notifications: [...] }
+      const liste = Array.isArray(data) ? data : data.notifications || [];
+      setNotifs(liste);
+    } catch (err) {
+      setError('Impossible de charger les notifications.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Marquer une notif comme lue ─────────────────────────
+  const marquerLue = async (id) => {
+    // Optimistic update
+    setNotifs((prev) => prev.map((n) => (n._id === id ? { ...n, lu: true } : n)));
+    try {
+      await API.put(`/notifications/${id}/lue`);
+    } catch {
+      // Rollback si erreur
+      setNotifs((prev) => prev.map((n) => (n._id === id ? { ...n, lu: false } : n)));
+    }
+  };
+
+  // ── Marquer toutes comme lues ───────────────────────────
+  const marquerToutesLues = async () => {
+    setNotifs((prev) => prev.map((n) => ({ ...n, lu: true })));
+    try {
+      await API.put('/notifications/toutes-lues');
+    } catch {
+      fetchNotifications(); // Recharge si erreur
+    }
+  };
+
+  // ── Supprimer (local uniquement — pas de route DELETE) ──
+  const supprimer = (id) => setNotifs((prev) => prev.filter((n) => n._id !== id));
+
+  // ── Filtres disponibles ──────────────────────────────────
+  const filtres = [
+    'Toutes',
+    'Non lues',
+    'VALIDATION',
+    'TACHE',
+    'REUNION',
+    'AFFECTATION',
+    'SYSTEME',
+  ];
+
   const notifsFiltrees = notifs.filter((n) => {
     if (filtre === 'Toutes') return true;
     if (filtre === 'Non lues') return !n.lu;
     return n.type === filtre;
   });
 
+  // ── Formater la date ─────────────────────────────────────
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#f4f7fa', fontFamily: 'Poppins, sans-serif' }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
-        * { box-sizing:border-box; margin:0; padding:0; }
-        .hexshape { clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); }
-        .notif-card { background:#fff; border-radius:14px; padding:1.25rem 1.5rem; margin-bottom:.85rem; box-shadow:0 2px 10px rgba(0,0,0,.05); border:1.5px solid #eee; transition:all .2s; cursor:pointer; }
-        .notif-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.09); transform:translateY(-1px); }
-        .notif-card.unread { border-left:4px solid ${TEAL}; background:#fff; }
-        .filter-btn { padding:.45rem 1rem; border-radius:100px; border:1.5px solid #e0e0e0; background:#fff; cursor:pointer; font-size:.8rem; font-weight:600; transition:all .2s; font-family:Poppins,sans-serif; color:#666; }
-        .filter-btn.on { background:${TEAL}; color:#fff; border-color:${TEAL}; }
-      `}</style>
+      <style>{CSS}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div
         style={{
           background: `linear-gradient(135deg,${DARK},#1a3a5c)`,
@@ -134,36 +184,68 @@ export default function NotificationsPage() {
           <div>
             <h1 style={{ color: '#fff', fontWeight: 800, fontSize: '1.2rem', lineHeight: 1 }}>
               Notifications
+              {nonLues > 0 && (
+                <span
+                  style={{
+                    marginLeft: '.6rem',
+                    background: YELLOW,
+                    color: DARK,
+                    borderRadius: 999,
+                    fontSize: '.65rem',
+                    fontWeight: 800,
+                    padding: '.1rem .5rem',
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  {nonLues}
+                </span>
+              )}
             </h1>
-            {nonLues > 0 && (
-              <p style={{ color: 'rgba(255,255,255,.65)', fontSize: '.78rem', marginTop: '.2rem' }}>
-                {nonLues} non lue{nonLues > 1 ? 's' : ''}
-              </p>
-            )}
+            <p style={{ color: 'rgba(255,255,255,.65)', fontSize: '.75rem', marginTop: '.2rem' }}>
+              {notifs.length} notification{notifs.length > 1 ? 's' : ''} au total
+            </p>
           </div>
         </div>
-        {nonLues > 0 && (
+
+        <div style={{ display: 'flex', gap: '.65rem' }}>
           <button
-            onClick={marquerToutesLues}
+            onClick={fetchNotifications}
             style={{
-              background: YELLOW,
-              color: DARK,
-              border: 'none',
-              padding: '.6rem 1.25rem',
+              background: 'rgba(255,255,255,.1)',
+              border: '1px solid rgba(255,255,255,.2)',
+              color: '#fff',
+              padding: '.6rem 1rem',
               borderRadius: 8,
               cursor: 'pointer',
               fontFamily: 'Poppins,sans-serif',
               fontSize: '.83rem',
-              fontWeight: 700,
             }}
           >
-            Tout marquer comme lu
+            🔄 Actualiser
           </button>
-        )}
+          {nonLues > 0 && (
+            <button
+              onClick={marquerToutesLues}
+              style={{
+                background: YELLOW,
+                color: DARK,
+                border: 'none',
+                padding: '.6rem 1.25rem',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontFamily: 'Poppins,sans-serif',
+                fontSize: '.83rem',
+                fontWeight: 700,
+              }}
+            >
+              ✓✓ Tout marquer comme lu
+            </button>
+          )}
+        </div>
       </div>
 
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 2rem' }}>
-        {/* Filtres */}
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem' }}>
+        {/* ── Filtres ── */}
         <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
           {filtres.map((f) => (
             <button
@@ -171,13 +253,33 @@ export default function NotificationsPage() {
               className={'filter-btn' + (filtre === f ? ' on' : '')}
               onClick={() => setFiltre(f)}
             >
-              {f === 'Non lues' && nonLues > 0 ? `${f} (${nonLues})` : f}
+              {f === 'Non lues' && nonLues > 0 ? `Non lues (${nonLues})` : f}
             </button>
           ))}
         </div>
 
-        {/* Liste */}
-        {notifsFiltrees.length === 0 ? (
+        {/* ── Erreur ── */}
+        {error && (
+          <div
+            style={{
+              background: '#fef2f2',
+              border: '1px solid #fca5a5',
+              color: '#991b1b',
+              padding: '.85rem 1rem',
+              borderRadius: 10,
+              marginBottom: '1rem',
+              fontSize: '.85rem',
+            }}
+          >
+            ❌ {error}
+          </div>
+        )}
+
+        {/* ── Loading ── */}
+        {loading && <div className="spinner" />}
+
+        {/* ── Liste vide ── */}
+        {!loading && notifsFiltrees.length === 0 && (
           <div
             style={{
               textAlign: 'center',
@@ -188,18 +290,44 @@ export default function NotificationsPage() {
             }}
           >
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔔</div>
-            <p style={{ color: '#aaa', fontSize: '.92rem' }}>Aucune notification</p>
+            <p style={{ color: '#aaa', fontSize: '.92rem' }}>
+              Aucune notification{filtre !== 'Toutes' ? ' pour ce filtre' : ''}
+            </p>
+            {filtre !== 'Toutes' && (
+              <button
+                onClick={() => setFiltre('Toutes')}
+                style={{
+                  marginTop: '1rem',
+                  background: TEAL,
+                  color: '#fff',
+                  border: 'none',
+                  padding: '.55rem 1.2rem',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontFamily: 'Poppins,sans-serif',
+                  fontSize: '.82rem',
+                  fontWeight: 600,
+                }}
+              >
+                Voir toutes
+              </button>
+            )}
           </div>
-        ) : (
+        )}
+
+        {/* ── Notifications ── */}
+        {!loading &&
           notifsFiltrees.map((n) => {
             const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.INFO;
+            const id = n._id || n.id;
             return (
               <div
-                key={n.id}
+                key={id}
                 className={'notif-card' + (!n.lu ? ' unread' : '')}
-                onClick={() => marquerLue(n.id)}
+                onClick={() => !n.lu && marquerLue(id)}
               >
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                  {/* Icone */}
                   <div
                     className="hexshape"
                     style={{
@@ -215,6 +343,8 @@ export default function NotificationsPage() {
                   >
                     {cfg.icon}
                   </div>
+
+                  {/* Contenu */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
@@ -224,7 +354,14 @@ export default function NotificationsPage() {
                         marginBottom: '.35rem',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '.5rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
                         <h3 style={{ fontWeight: 700, color: DARK, fontSize: '.9rem' }}>
                           {n.titre}
                         </h3>
@@ -240,11 +377,15 @@ export default function NotificationsPage() {
                             }}
                           />
                         )}
+                        {/* Badge "via popup" si la notif vient d'une popup */}
+                        {n.isPopupShown && n.lu === false && (
+                          <span className="popup-badge">🔔 Nouveau</span>
+                        )}
                       </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          supprimer(n.id);
+                          supprimer(id);
                         }}
                         style={{
                           background: 'none',
@@ -255,10 +396,13 @@ export default function NotificationsPage() {
                           padding: '.1rem .3rem',
                           flexShrink: 0,
                         }}
+                        title="Supprimer"
                       >
                         ✕
                       </button>
                     </div>
+
+                    {/* Message — contenu ou message selon le champ dispo */}
                     <p
                       style={{
                         color: '#666',
@@ -267,9 +411,17 @@ export default function NotificationsPage() {
                         marginBottom: '.5rem',
                       }}
                     >
-                      {n.message}
+                      {n.contenu || n.message || '—'}
                     </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '.75rem',
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <span
                         style={{
                           background: cfg.bg,
@@ -282,14 +434,36 @@ export default function NotificationsPage() {
                       >
                         {cfg.label}
                       </span>
-                      <span style={{ color: '#bbb', fontSize: '.75rem' }}>{n.date}</span>
+                      <span style={{ color: '#bbb', fontSize: '.75rem' }}>
+                        {formatDate(n.createdAt || n.date)}
+                      </span>
+                      {!n.lu && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            marquerLue(id);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: '1px solid #d1fae5',
+                            color: '#059669',
+                            borderRadius: 6,
+                            padding: '.15rem .55rem',
+                            fontSize: '.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            fontFamily: 'Poppins,sans-serif',
+                          }}
+                        >
+                          ✓ Marquer lu
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             );
-          })
-        )}
+          })}
       </div>
     </div>
   );

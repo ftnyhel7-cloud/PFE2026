@@ -1,33 +1,50 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+// Instance axios publique (pas besoin du token pour le contact)
+const publicAPI = axios.create({
+  baseURL: 'http://localhost:5000/api',
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
+});
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
-  const [counterStarted, setCounterStarted] = useState(false);
+
+  // ── Contact form state ──────────────────────────────────
+  const [contactForm, setContactForm] = useState({
+    nom: '',
+    email: '',
+    sujet: '',
+    message: '',
+  });
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactSuccess, setContactSuccess] = useState('');
+  const [contactError, setContactError] = useState('');
 
   const slides = [
     {
-      bg: 'linear-gradient(135deg, #0A1628 0%, #1a3a5c 50%, #0d2137 100%)',
       title: 'Trouvez Votre',
-      titleHighlight: 'Projet de Fin d\'Etudes',
-      subtitle: 'La plateforme intelligente qui connecte etudiants et encadrants pour une experience PFE reussie.',
+      titleHighlight: "Projet de Fin d'Etudes",
+      subtitle:
+        'La plateforme intelligente qui connecte etudiants et encadrants pour une experience PFE reussie.',
       btn: 'Commencer maintenant',
     },
     {
-      bg: 'linear-gradient(135deg, #0d2137 0%, #1a4a3a 50%, #0A1628 100%)',
       title: 'Intelligence Artificielle',
       titleHighlight: 'Pour Votre Candidature',
-      subtitle: 'Notre IA analyse votre CV et calcule votre score de compatibilite avec chaque sujet PFE disponible.',
+      subtitle:
+        'Notre IA analyse votre CV et calcule votre score de compatibilite avec chaque sujet PFE disponible.',
       btn: 'Voir les sujets',
     },
     {
-      bg: 'linear-gradient(135deg, #1a2a0d 0%, #0A1628 50%, #1a1a3a 100%)',
       title: 'Gestion Complete',
       titleHighlight: 'De Votre Parcours PFE',
-      subtitle: 'Calendrier, messagerie, taches, notifications — tout ce dont vous avez besoin en un seul endroit.',
+      subtitle:
+        'Calendrier, messagerie, taches, notifications — tout ce dont vous avez besoin en un seul endroit.',
       btn: 'En savoir plus',
     },
   ];
@@ -39,23 +56,79 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSlideIndex(prev => (prev + 1) % slides.length);
-    }, 5000);
+    const timer = setInterval(() => setSlideIndex((prev) => (prev + 1) % slides.length), 5000);
     return () => clearInterval(timer);
   }, []);
 
+  // ── Handle contact submit ───────────────────────────────
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    setContactError('');
+    setContactSuccess('');
+
+    // Validation front basique
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(contactForm.email)) {
+      setContactError("Format d'email invalide.");
+      return;
+    }
+    if (contactForm.message.trim().length < 10) {
+      setContactError('Le message doit contenir au moins 10 caractères.');
+      return;
+    }
+
+    setContactLoading(true);
+    try {
+      const { data } = await publicAPI.post('/support/contact', {
+        nom: contactForm.nom.trim(),
+        email: contactForm.email.trim(),
+        sujet: contactForm.sujet.trim(),
+        message: contactForm.message.trim(),
+      });
+
+      setContactSuccess(data.message || 'Message envoyé avec succès !');
+      setContactForm({ nom: '', email: '', sujet: '', message: '' });
+      // Effacer le message de succès après 6 s
+      setTimeout(() => setContactSuccess(''), 6000);
+    } catch (err) {
+      setContactError(
+        err.response?.data?.message || "Erreur lors de l'envoi. Réessayez plus tard."
+      );
+    } finally {
+      setContactLoading(false);
+    }
+  };
+
+  // ── Shared field change handler ─────────────────────────
+  const handleField = (field) => (e) =>
+    setContactForm((prev) => ({ ...prev, [field]: e.target.value }));
+
   const features = [
-    { color: '#4A90D9', icon: '🎓', title: 'Encadrants Qualifies', desc: 'Des professeurs et professionnels expertes dans leurs domaines pour vous guider.' },
-    { color: '#E74C3C', icon: '📚', title: 'Sujets Diversifies', desc: 'Plus de 100 sujets PFE dans tous les domaines technologiques et scientifiques.' },
-    { color: '#27AE60', icon: '🌍', title: 'Reconnaissance Globale', desc: 'Des projets reconnus et valorises par les entreprises locales et internationales.' },
+    {
+      color: '#4A90D9',
+      icon: '🎓',
+      title: 'Encadrants Qualifies',
+      desc: 'Des professeurs et professionnels expertes dans leurs domaines pour vous guider.',
+    },
+    {
+      color: '#E74C3C',
+      icon: '📚',
+      title: 'Sujets Diversifies',
+      desc: 'Plus de 100 sujets PFE dans tous les domaines technologiques et scientifiques.',
+    },
+    {
+      color: '#27AE60',
+      icon: '🌍',
+      title: 'Reconnaissance Globale',
+      desc: 'Des projets reconnus et valorises par les entreprises locales et internationales.',
+    },
   ];
 
   const stats = [
-    { value: 200, label: 'Etudiants', suffix: '+' },
-    { value: 50, label: 'Encadrants', suffix: '+' },
-    { value: 100, label: 'Sujets PFE', suffix: '+' },
-    { value: 95, label: 'Satisfaction', suffix: '%' },
+    { value: '200+', label: 'Etudiants' },
+    { value: '50+', label: 'Encadrants' },
+    { value: '100+', label: 'Sujets PFE' },
+    { value: '95%', label: 'Satisfaction' },
   ];
 
   const courses = [
@@ -76,121 +149,71 @@ export default function LandingPage() {
 
   const slide = slides[slideIndex];
 
+  const inputStyle = {
+    width: '100%',
+    padding: '.85rem 1.1rem',
+    borderRadius: 10,
+    border: '1.5px solid #e0e0e0',
+    fontSize: '.9rem',
+    outline: 'none',
+    fontFamily: 'Poppins, sans-serif',
+    transition: 'border-color .18s',
+  };
+
   return (
     <div
       style={{
         background: '#f0f4f8',
         minHeight: '100vh',
-        fontFamily: 'Segoe UI, sans-serif',
+        fontFamily: 'Poppins, sans-serif',
         color: '#333',
         overflowX: 'hidden',
       }}
     >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Poppins', sans-serif; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; }
 
-        @keyframes fadeIn { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes slideIn { from { opacity:0; transform:translateX(-40px); } to { opacity:1; transform:translateX(0); } }
-        @keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.05); } }
-        @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+        @keyframes fadeIn  { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes pulse   { 0%,100% { transform:scale(1); } 50% { transform:scale(1.05); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
 
         .animate-fade { animation: fadeIn .8s ease both; }
-        .animate-slide { animation: slideIn .8s ease both; }
 
-        .nav-link {
-          color: #fff;
-          text-decoration: none;
-          font-size: .95rem;
-          font-weight: 500;
-          padding: .4rem .8rem;
-          border-radius: 6px;
-          transition: all .2s;
-          cursor: pointer;
-        }
-        .nav-link:hover { background: rgba(255,255,255,.15); }
+        .nav-link { color:#fff; text-decoration:none; font-size:.95rem; font-weight:500; padding:.4rem .8rem; border-radius:6px; transition:all .2s; cursor:pointer; }
+        .nav-link:hover { background:rgba(255,255,255,.15); }
 
-        .btn-main {
-          background: #F39C12;
-          color: #fff;
-          border: none;
-          padding: .85rem 2.2rem;
-          border-radius: 8px;
-          font-size: 1rem;
-          font-weight: 700;
-          cursor: pointer;
-          font-family: 'Poppins', sans-serif;
-          transition: all .25s;
-          text-transform: uppercase;
-          letter-spacing: .05em;
-        }
-        .btn-main:hover { background: #E67E22; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(243,156,18,.4); }
+        .btn-main { background:#F39C12; color:#fff; border:none; padding:.85rem 2.2rem; border-radius:8px; font-size:1rem; font-weight:700; cursor:pointer; font-family:'Poppins',sans-serif; transition:all .25s; text-transform:uppercase; letter-spacing:.05em; }
+        .btn-main:hover { background:#E67E22; transform:translateY(-2px); box-shadow:0 8px 24px rgba(243,156,18,.4); }
+        .btn-main:disabled { opacity:.6; cursor:not-allowed; transform:none; box-shadow:none; }
 
-        .btn-outline {
-          background: transparent;
-          color: #fff;
-          border: 2px solid rgba(255,255,255,.6);
-          padding: .85rem 2.2rem;
-          border-radius: 8px;
-          font-size: 1rem;
-          font-weight: 600;
-          cursor: pointer;
-          font-family: 'Poppins', sans-serif;
-          transition: all .25s;
-        }
-        .btn-outline:hover { background: rgba(255,255,255,.15); border-color: #fff; }
+        .btn-outline { background:transparent; color:#fff; border:2px solid rgba(255,255,255,.6); padding:.85rem 2.2rem; border-radius:8px; font-size:1rem; font-weight:600; cursor:pointer; font-family:'Poppins',sans-serif; transition:all .25s; }
+        .btn-outline:hover { background:rgba(255,255,255,.15); border-color:#fff; }
 
-        .feature-card {
-          background: #fff;
-          border-radius: 16px;
-          padding: 2.5rem 2rem;
-          text-align: center;
-          transition: all .3s;
-          box-shadow: 0 4px 20px rgba(0,0,0,.08);
-        }
-        .feature-card:hover { transform: translateY(-8px); box-shadow: 0 16px 40px rgba(0,0,0,.15); }
+        .feature-card { background:#fff; border-radius:16px; padding:2.5rem 2rem; text-align:center; transition:all .3s; box-shadow:0 4px 20px rgba(0,0,0,.08); }
+        .feature-card:hover { transform:translateY(-8px); box-shadow:0 16px 40px rgba(0,0,0,.15); }
 
-        .course-card {
-          background: #fff;
-          border-radius: 14px;
-          padding: 1.75rem;
-          transition: all .3s;
-          box-shadow: 0 4px 16px rgba(0,0,0,.07);
-          cursor: pointer;
-          border-left: 5px solid transparent;
-        }
-        .course-card:hover { transform: translateY(-5px); box-shadow: 0 12px 32px rgba(0,0,0,.12); }
+        .course-card { background:#fff; border-radius:14px; padding:1.75rem; transition:all .3s; box-shadow:0 4px 16px rgba(0,0,0,.07); cursor:pointer; border-left:5px solid transparent; }
+        .course-card:hover { transform:translateY(-5px); box-shadow:0 12px 32px rgba(0,0,0,.12); }
 
-        .teacher-card {
-          background: #fff;
-          border-radius: 16px;
-          padding: 2rem;
-          text-align: center;
-          transition: all .3s;
-          box-shadow: 0 4px 16px rgba(0,0,0,.07);
-        }
-        .teacher-card:hover { transform: translateY(-6px); box-shadow: 0 16px 36px rgba(0,0,0,.12); }
+        .teacher-card { background:#fff; border-radius:16px; padding:2rem; text-align:center; transition:all .3s; box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .teacher-card:hover { transform:translateY(-6px); box-shadow:0 16px 36px rgba(0,0,0,.12); }
 
-        .slide-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.4); border: none; cursor: pointer; transition: all .3s; }
-        .slide-dot.active { background: #F39C12; width: 30px; border-radius: 5px; }
+        .slide-dot { width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,.4); border:none; cursor:pointer; transition:all .3s; }
+        .slide-dot.active { background:#F39C12; width:30px; border-radius:5px; }
 
-        .social-btn {
-          width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-          text-decoration: none; font-size: 1.1rem; transition: all .25s; border: 2px solid rgba(255,255,255,.2);
-        }
-        .social-btn:hover { transform: translateY(-3px); border-color: #F39C12; }
+        .social-btn { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; font-size:1.1rem; transition:all .25s; border:2px solid rgba(255,255,255,.2); }
+        .social-btn:hover { transform:translateY(-3px); border-color:#F39C12; }
 
-        .stat-item { text-align: center; }
-        .stat-num { font-size: 2.8rem; font-weight: 800; color: #1a3a5c; line-height: 1; }
-        .stat-label { font-size: .95rem; color: #666; margin-top: .3rem; font-weight: 500; }
+        .contact-input:focus { border-color: #1a3a5c !important; }
 
-        input, textarea { font-family: 'Poppins', sans-serif; }
-        input::placeholder, textarea::placeholder { color: #aaa; }
+        .contact-success { background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; padding:.85rem 1.1rem; border-radius:10px; font-size:.88rem; font-weight:600; animation:slideUp .3s ease; display:flex; align-items:center; gap:.5rem; }
+        .contact-error   { background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; padding:.85rem 1.1rem; border-radius:10px; font-size:.88rem; font-weight:600; animation:slideUp .3s ease; display:flex; align-items:center; gap:.5rem; }
+
+        input::placeholder, textarea::placeholder { color:#aaa; }
+        select option { background:#fff; color:#333; }
       `}</style>
-
-      {/* ── TOP BAR ── */}
-
 
       {/* ── NAVBAR ── */}
       <nav
@@ -207,7 +230,6 @@ export default function LandingPage() {
           transition: 'all .3s',
         }}
       >
-        {/* Logo */}
         <div
           style={{ display: 'flex', alignItems: 'center', gap: '.75rem', cursor: 'pointer' }}
           onClick={() => navigate('/')}
@@ -227,20 +249,11 @@ export default function LandingPage() {
             🎓
           </div>
           <div>
-            <div
-              style={{
-                fontFamily: 'Poppins,sans-serif',
-                fontWeight: 800,
-                fontSize: '1.2rem',
-                color: '#fff',
-                lineHeight: 1,
-              }}
-            >
+            <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#fff', lineHeight: 1 }}>
               Project
             </div>
             <div
               style={{
-                fontFamily: 'Poppins,sans-serif',
                 fontWeight: 600,
                 fontSize: '.7rem',
                 color: '#F39C12',
@@ -252,27 +265,18 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-
-        {/* Links */}
         <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
-          <a href="#accueil" className="nav-link">
-            Accueil
-          </a>
-          <a href="#apropos" className="nav-link">
-            A propos
-          </a>
-          <a href="#domaines" className="nav-link">
-            Domaines
-          </a>
-          <a href="#encadrants" className="nav-link">
-            Encadrants
-          </a>
-          <a href="#contact" className="nav-link">
-            Contact
-          </a>
+          {['accueil', 'apropos', 'domaines', 'encadrants', 'contact'].map((id) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="nav-link"
+              style={{ textTransform: 'capitalize' }}
+            >
+              {id === 'apropos' ? 'A propos' : id.charAt(0).toUpperCase() + id.slice(1)}
+            </a>
+          ))}
         </div>
-
-        {/* Boutons */}
         <div style={{ display: 'flex', gap: '.75rem' }}>
           <button
             className="btn-outline"
@@ -291,64 +295,21 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ── HERO SLIDER ── */}
+      {/* ── HERO ── */}
       <section
         id="accueil"
         style={{
           minHeight: '88vh',
-          background: `
-  linear-gradient(rgba(10,22,40,0.7), rgba(10,22,40,0.7)),
-  url('/graduation.jpg') center/cover no-repeat
-`,
+          background: `linear-gradient(rgba(10,22,40,0.7),rgba(10,22,40,0.7)), url('/graduation.jpg') center/cover no-repeat`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
           overflow: 'hidden',
-          transition: 'background 1s ease',
           padding: '4rem 2.5rem',
         }}
       >
-        {/* Cercles decoratifs */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '-100px',
-            right: '-100px',
-            width: 500,
-            height: 500,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,.03)',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '-80px',
-            left: '-80px',
-            width: 350,
-            height: 350,
-            borderRadius: '50%',
-            background: 'rgba(243,156,18,.05)',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: '30%',
-            left: '5%',
-            width: 200,
-            height: 200,
-            borderRadius: '50%',
-            border: '2px solid rgba(255,255,255,.06)',
-            pointerEvents: 'none',
-          }}
-        />
-
         <div style={{ maxWidth: 900, textAlign: 'center', position: 'relative' }}>
-          {/* Badge */}
           <div
             style={{
               display: 'inline-flex',
@@ -375,15 +336,12 @@ export default function LandingPage() {
               Plateforme de Gestion PFE — Tunisie
             </span>
           </div>
-
-          {/* Titre */}
           <h1
             key={slideIndex}
             className="animate-fade"
             style={{
-              fontFamily: 'Poppins,sans-serif',
               fontWeight: 800,
-              fontSize: 'clamp(2.2rem, 5vw, 3.8rem)',
+              fontSize: 'clamp(2.2rem,5vw,3.8rem)',
               color: '#fff',
               lineHeight: 1.15,
               marginBottom: '1.25rem',
@@ -391,8 +349,6 @@ export default function LandingPage() {
           >
             {slide.title} <span style={{ color: '#F39C12' }}>{slide.titleHighlight}</span>
           </h1>
-
-          {/* Sous-titre */}
           <p
             key={'sub-' + slideIndex}
             className="animate-fade"
@@ -406,8 +362,6 @@ export default function LandingPage() {
           >
             {slide.subtitle}
           </p>
-
-          {/* Boutons */}
           <div
             style={{
               display: 'flex',
@@ -422,15 +376,13 @@ export default function LandingPage() {
             </button>
             <button
               className="btn-outline"
-              onClick={() => {
-                document.getElementById('apropos').scrollIntoView({ behavior: 'smooth' });
-              }}
+              onClick={() =>
+                document.getElementById('apropos').scrollIntoView({ behavior: 'smooth' })
+              }
             >
               En savoir plus
             </button>
           </div>
-
-          {/* Dots navigation */}
           <div
             style={{
               display: 'flex',
@@ -447,8 +399,6 @@ export default function LandingPage() {
               />
             ))}
           </div>
-
-          {/* Stats rapides */}
           <div
             style={{
               display: 'flex',
@@ -464,17 +414,7 @@ export default function LandingPage() {
           >
             {stats.map((s, i) => (
               <div key={i} style={{ textAlign: 'center' }}>
-                <div
-                  style={{
-                    fontFamily: 'Poppins,sans-serif',
-                    fontWeight: 800,
-                    fontSize: '2rem',
-                    color: '#F39C12',
-                  }}
-                >
-                  {s.value}
-                  {s.suffix}
-                </div>
+                <div style={{ fontWeight: 800, fontSize: '2rem', color: '#F39C12' }}>{s.value}</div>
                 <div
                   style={{ color: 'rgba(255,255,255,.7)', fontSize: '.85rem', marginTop: '.2rem' }}
                 >
@@ -504,9 +444,8 @@ export default function LandingPage() {
             </div>
             <h2
               style={{
-                fontFamily: 'Poppins,sans-serif',
                 fontWeight: 800,
-                fontSize: 'clamp(1.8rem, 3.5vw, 2.6rem)',
+                fontSize: 'clamp(1.8rem,3.5vw,2.6rem)',
                 color: '#1a3a5c',
                 lineHeight: 1.2,
                 marginBottom: '1rem',
@@ -515,15 +454,13 @@ export default function LandingPage() {
               Tout ce dont vous avez besoin
             </h2>
             <p style={{ color: '#666', maxWidth: 580, margin: '0 auto', lineHeight: 1.7 }}>
-              Project Finder simplifie la gestion des projets de fin d'etudes en mettant en relation
-              etudiants et encadrants qualifies.
+              Project Finder simplifie la gestion des projets de fin d'etudes.
             </p>
           </div>
-
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))',
               gap: '1.5rem',
             }}
           >
@@ -546,7 +483,6 @@ export default function LandingPage() {
                 </div>
                 <h3
                   style={{
-                    fontFamily: 'Poppins,sans-serif',
                     fontWeight: 700,
                     fontSize: '1.2rem',
                     color: '#1a3a5c',
@@ -556,19 +492,6 @@ export default function LandingPage() {
                   {f.title}
                 </h3>
                 <p style={{ color: '#666', lineHeight: 1.7, fontSize: '.95rem' }}>{f.desc}</p>
-                <div style={{ marginTop: '1.25rem' }}>
-                  <a
-                    href="#"
-                    style={{
-                      color: f.color,
-                      fontWeight: 600,
-                      fontSize: '.9rem',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    En savoir plus →
-                  </a>
-                </div>
               </div>
             ))}
           </div>
@@ -582,24 +505,15 @@ export default function LandingPage() {
             maxWidth: 1100,
             margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))',
             gap: '2rem',
             textAlign: 'center',
           }}
         >
           {stats.map((s, i) => (
             <div key={i} style={{ padding: '1.5rem' }}>
-              <div
-                style={{
-                  fontFamily: 'Poppins,sans-serif',
-                  fontWeight: 800,
-                  fontSize: '3rem',
-                  color: '#F39C12',
-                  lineHeight: 1,
-                }}
-              >
+              <div style={{ fontWeight: 800, fontSize: '3rem', color: '#F39C12', lineHeight: 1 }}>
                 {s.value}
-                {s.suffix}
               </div>
               <div
                 style={{
@@ -633,21 +547,15 @@ export default function LandingPage() {
               Domaines disponibles
             </div>
             <h2
-              style={{
-                fontFamily: 'Poppins,sans-serif',
-                fontWeight: 800,
-                fontSize: 'clamp(1.8rem, 3.5vw, 2.6rem)',
-                color: '#1a3a5c',
-              }}
+              style={{ fontWeight: 800, fontSize: 'clamp(1.8rem,3.5vw,2.6rem)', color: '#1a3a5c' }}
             >
               Explorez nos domaines PFE
             </h2>
           </div>
-
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))',
               gap: '1.25rem',
             }}
           >
@@ -682,14 +590,7 @@ export default function LandingPage() {
                     {c.icon}
                   </div>
                   <div>
-                    <h3
-                      style={{
-                        fontFamily: 'Poppins,sans-serif',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        color: '#1a3a5c',
-                      }}
-                    >
+                    <h3 style={{ fontWeight: 700, fontSize: '1rem', color: '#1a3a5c' }}>
                       {c.title}
                     </h3>
                     <span style={{ color: c.color, fontSize: '.82rem', fontWeight: 600 }}>
@@ -726,21 +627,15 @@ export default function LandingPage() {
               Notre equipe
             </div>
             <h2
-              style={{
-                fontFamily: 'Poppins,sans-serif',
-                fontWeight: 800,
-                fontSize: 'clamp(1.8rem, 3.5vw, 2.6rem)',
-                color: '#1a3a5c',
-              }}
+              style={{ fontWeight: 800, fontSize: 'clamp(1.8rem,3.5vw,2.6rem)', color: '#1a3a5c' }}
             >
               Nos encadrants experts
             </h2>
           </div>
-
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))',
               gap: '1.5rem',
             }}
           >
@@ -751,7 +646,7 @@ export default function LandingPage() {
                     width: 80,
                     height: 80,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg,' + t.color + ',' + t.color + 'aa)',
+                    background: `linear-gradient(135deg,${t.color},${t.color}aa)`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -759,14 +654,12 @@ export default function LandingPage() {
                     fontSize: '1.8rem',
                     fontWeight: 800,
                     color: '#fff',
-                    fontFamily: 'Poppins,sans-serif',
                   }}
                 >
-                  {t.name.split(' ')[1] ? t.name.split(' ')[1][0] : t.name[0]}
+                  {t.name.split(' ')[1]?.[0] || t.name[0]}
                 </div>
                 <h3
                   style={{
-                    fontFamily: 'Poppins,sans-serif',
                     fontWeight: 700,
                     fontSize: '1rem',
                     color: '#1a3a5c',
@@ -785,27 +678,18 @@ export default function LandingPage() {
                 >
                   {t.role}
                 </p>
-                <div
+                <span
                   style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    gap: '.5rem',
-                    flexWrap: 'wrap',
+                    background: t.color + '15',
+                    color: t.color,
+                    padding: '.25rem .75rem',
+                    borderRadius: 100,
+                    fontSize: '.78rem',
+                    fontWeight: 600,
                   }}
                 >
-                  <span
-                    style={{
-                      background: t.color + '15',
-                      color: t.color,
-                      padding: '.25rem .75rem',
-                      borderRadius: 100,
-                      fontSize: '.78rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t.sujets} sujets
-                  </span>
-                </div>
+                  {t.sujets} sujets
+                </span>
               </div>
             ))}
           </div>
@@ -839,9 +723,8 @@ export default function LandingPage() {
             </div>
             <h2
               style={{
-                fontFamily: 'Poppins,sans-serif',
                 fontWeight: 800,
-                fontSize: 'clamp(1.8rem, 3.5vw, 2.4rem)',
+                fontSize: 'clamp(1.8rem,3.5vw,2.4rem)',
                 color: '#fff',
                 lineHeight: 1.2,
                 marginBottom: '1.5rem',
@@ -858,8 +741,7 @@ export default function LandingPage() {
               }}
             >
               Project Finder est une plateforme innovante dediee a la gestion des projets de fin
-              d'etudes en Tunisie. Notre mission est de faciliter la mise en relation entre
-              etudiants et encadrants.
+              d'etudes en Tunisie.
             </p>
             <p
               style={{
@@ -870,13 +752,12 @@ export default function LandingPage() {
               }}
             >
               Grace a notre intelligence artificielle, nous analysons les competences de chaque
-              etudiant et proposons les sujets les plus compatibles avec son profil.
+              etudiant et proposons les sujets les plus compatibles.
             </p>
             <button className="btn-main" onClick={() => navigate('/auth')}>
               Rejoindre maintenant
             </button>
           </div>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             {[
               { emoji: '🎓', title: 'Pour les etudiants', desc: 'Trouvez votre sujet ideal' },
@@ -897,7 +778,6 @@ export default function LandingPage() {
                 <div style={{ fontSize: '2rem', marginBottom: '.75rem' }}>{c.emoji}</div>
                 <div
                   style={{
-                    fontFamily: 'Poppins,sans-serif',
                     fontWeight: 700,
                     fontSize: '.95rem',
                     color: '#fff',
@@ -913,7 +793,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CONTACT ── */}
+      {/* ══════════════════════════════════════════════════════
+          ── CONTACT — FORMULAIRE FONCTIONNEL ──
+      ══════════════════════════════════════════════════════ */}
       <section id="contact" style={{ padding: '6rem 2.5rem', background: '#fff' }}>
         <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
           <div
@@ -930,9 +812,8 @@ export default function LandingPage() {
           </div>
           <h2
             style={{
-              fontFamily: 'Poppins,sans-serif',
               fontWeight: 800,
-              fontSize: 'clamp(1.8rem, 3.5vw, 2.4rem)',
+              fontSize: 'clamp(1.8rem,3.5vw,2.4rem)',
               color: '#1a3a5c',
               marginBottom: '1rem',
             }}
@@ -943,7 +824,23 @@ export default function LandingPage() {
             Une question ? Ecrivez-nous et nous vous repondrons rapidement.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
+          {/* Feedback messages */}
+          {contactSuccess && (
+            <div className="contact-success" style={{ marginBottom: '1.25rem' }}>
+              ✅ {contactSuccess}
+            </div>
+          )}
+          {contactError && (
+            <div className="contact-error" style={{ marginBottom: '1.25rem' }}>
+              ❌ {contactError}
+            </div>
+          )}
+
+          {/* ── FORM ── */}
+          <form
+            onSubmit={handleContactSubmit}
+            style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}
+          >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
                 <label
@@ -955,18 +852,15 @@ export default function LandingPage() {
                     marginBottom: '.4rem',
                   }}
                 >
-                  Nom
+                  Nom <span style={{ color: '#E74C3C' }}>*</span>
                 </label>
                 <input
+                  className="contact-input"
                   placeholder="Votre nom"
-                  style={{
-                    width: '100%',
-                    padding: '.85rem 1.1rem',
-                    borderRadius: 10,
-                    border: '1.5px solid #e0e0e0',
-                    fontSize: '.9rem',
-                    outline: 'none',
-                  }}
+                  value={contactForm.nom}
+                  onChange={handleField('nom')}
+                  required
+                  style={inputStyle}
                 />
               </div>
               <div>
@@ -979,22 +873,20 @@ export default function LandingPage() {
                     marginBottom: '.4rem',
                   }}
                 >
-                  Email
+                  Email <span style={{ color: '#E74C3C' }}>*</span>
                 </label>
                 <input
+                  className="contact-input"
                   type="email"
                   placeholder="votre@email.com"
-                  style={{
-                    width: '100%',
-                    padding: '.85rem 1.1rem',
-                    borderRadius: 10,
-                    border: '1.5px solid #e0e0e0',
-                    fontSize: '.9rem',
-                    outline: 'none',
-                  }}
+                  value={contactForm.email}
+                  onChange={handleField('email')}
+                  required
+                  style={inputStyle}
                 />
               </div>
             </div>
+
             <div>
               <label
                 style={{
@@ -1005,20 +897,18 @@ export default function LandingPage() {
                   marginBottom: '.4rem',
                 }}
               >
-                Sujet
+                Sujet <span style={{ color: '#E74C3C' }}>*</span>
               </label>
               <input
+                className="contact-input"
                 placeholder="Sujet du message"
-                style={{
-                  width: '100%',
-                  padding: '.85rem 1.1rem',
-                  borderRadius: 10,
-                  border: '1.5px solid #e0e0e0',
-                  fontSize: '.9rem',
-                  outline: 'none',
-                }}
+                value={contactForm.sujet}
+                onChange={handleField('sujet')}
+                required
+                style={inputStyle}
               />
             </div>
+
             <div>
               <label
                 style={{
@@ -1029,28 +919,83 @@ export default function LandingPage() {
                   marginBottom: '.4rem',
                 }}
               >
-                Message
+                Message <span style={{ color: '#E74C3C' }}>*</span>
               </label>
               <textarea
+                className="contact-input"
                 rows={5}
-                placeholder="Votre message..."
-                style={{
-                  width: '100%',
-                  padding: '.85rem 1.1rem',
-                  borderRadius: 10,
-                  border: '1.5px solid #e0e0e0',
-                  fontSize: '.9rem',
-                  outline: 'none',
-                  resize: 'vertical',
-                }}
+                placeholder="Votre message... (minimum 10 caractères)"
+                value={contactForm.message}
+                onChange={handleField('message')}
+                required
+                style={{ ...inputStyle, resize: 'vertical' }}
               />
+              <p style={{ color: '#aaa', fontSize: '.75rem', marginTop: '.3rem' }}>
+                {contactForm.message.length} / minimum 10 caractères
+              </p>
             </div>
-            <button
-              className="btn-main"
-              style={{ alignSelf: 'flex-start', padding: '1rem 2.5rem' }}
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '1rem',
+              }}
             >
-              Envoyer le message
-            </button>
+              <button
+                type="submit"
+                className="btn-main"
+                disabled={contactLoading}
+                style={{ padding: '1rem 2.5rem' }}
+              >
+                {contactLoading ? '⏳ Envoi en cours...' : '📨 Envoyer le message'}
+              </button>
+              {contactLoading && (
+                <span style={{ color: '#666', fontSize: '.82rem' }}>Veuillez patienter...</span>
+              )}
+            </div>
+          </form>
+
+          {/* Infos contact rapides */}
+          <div
+            style={{
+              marginTop: '3rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3,1fr)',
+              gap: '1rem',
+            }}
+          >
+            {[
+              { icon: '📍', label: 'Adresse', value: 'Tunis, Tunisie' },
+              { icon: '📞', label: 'Téléphone', value: '+216 71 000 000' },
+              { icon: '📧', label: 'Email', value: 'contact@projectfinder.tn' },
+            ].map((info, i) => (
+              <div
+                key={i}
+                style={{
+                  background: '#f8fafc',
+                  borderRadius: 12,
+                  padding: '1.25rem',
+                  textAlign: 'center',
+                  border: '1px solid #e8ecf0',
+                }}
+              >
+                <div style={{ fontSize: '1.5rem', marginBottom: '.5rem' }}>{info.icon}</div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    color: '#1a3a5c',
+                    fontSize: '.82rem',
+                    marginBottom: '.25rem',
+                  }}
+                >
+                  {info.label}
+                </div>
+                <div style={{ color: '#666', fontSize: '.8rem' }}>{info.value}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -1058,7 +1003,6 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer style={{ background: '#0d1f30', padding: '4rem 2.5rem 2rem' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          {/* Top footer */}
           <div
             style={{
               display: 'grid',
@@ -1067,7 +1011,6 @@ export default function LandingPage() {
               marginBottom: '3rem',
             }}
           >
-            {/* Logo + desc */}
             <div>
               <div
                 style={{
@@ -1093,19 +1036,12 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <div
-                    style={{
-                      fontFamily: 'Poppins,sans-serif',
-                      fontWeight: 800,
-                      fontSize: '1.1rem',
-                      color: '#fff',
-                      lineHeight: 1,
-                    }}
+                    style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff', lineHeight: 1 }}
                   >
                     Project
                   </div>
                   <div
                     style={{
-                      fontFamily: 'Poppins,sans-serif',
                       fontWeight: 600,
                       fontSize: '.65rem',
                       color: '#F39C12',
@@ -1127,79 +1063,29 @@ export default function LandingPage() {
               >
                 La plateforme intelligente de gestion des projets de fin d'etudes en Tunisie.
               </p>
-              {/* Reseaux sociaux */}
               <div style={{ display: 'flex', gap: '.6rem' }}>
-                <a
-                  href="https://facebook.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{ background: '#3B5998', color: '#fff' }}
-                  title="Facebook"
-                >
-                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>f</span>
-                </a>
-                <a
-                  href="https://instagram.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{
-                    background: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)',
-                    color: '#fff',
-                  }}
-                  title="Instagram"
-                >
-                  📷
-                </a>
-                <a
-                  href="https://linkedin.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{ background: '#0077B5', color: '#fff' }}
-                  title="LinkedIn"
-                >
-                  <span style={{ fontWeight: 700 }}>in</span>
-                </a>
-                <a
-                  href="https://twitter.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{ background: '#1DA1F2', color: '#fff' }}
-                  title="Twitter / X"
-                >
-                  𝕏
-                </a>
-                <a
-                  href="https://youtube.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{ background: '#FF0000', color: '#fff' }}
-                  title="YouTube"
-                >
-                  ▶
-                </a>
-                <a
-                  href="https://wa.me/21600000000"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  style={{ background: '#25D366', color: '#fff' }}
-                  title="WhatsApp"
-                >
-                  💬
-                </a>
+                {[
+                  { href: 'https://facebook.com', bg: '#3B5998', label: 'f' },
+                  { href: 'https://linkedin.com', bg: '#0077B5', label: 'in' },
+                  { href: 'https://twitter.com', bg: '#1DA1F2', label: '𝕏' },
+                  { href: 'https://youtube.com', bg: '#FF0000', label: '▶' },
+                ].map((s, i) => (
+                  <a
+                    key={i}
+                    href={s.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="social-btn"
+                    style={{ background: s.bg, color: '#fff', fontWeight: 700, fontSize: '.9rem' }}
+                  >
+                    {s.label}
+                  </a>
+                ))}
               </div>
             </div>
-
-            {/* Liens rapides */}
             <div>
               <h4
                 style={{
-                  fontFamily: 'Poppins,sans-serif',
                   fontWeight: 700,
                   color: '#fff',
                   marginBottom: '1.25rem',
@@ -1227,12 +1113,9 @@ export default function LandingPage() {
                 </a>
               ))}
             </div>
-
-            {/* Pour les etudiants */}
             <div>
               <h4
                 style={{
-                  fontFamily: 'Poppins,sans-serif',
                   fontWeight: 700,
                   color: '#fff',
                   marginBottom: '1.25rem',
@@ -1266,12 +1149,9 @@ export default function LandingPage() {
                 </a>
               ))}
             </div>
-
-            {/* Contact */}
             <div>
               <h4
                 style={{
-                  fontFamily: 'Poppins,sans-serif',
                   fontWeight: 700,
                   color: '#fff',
                   marginBottom: '1.25rem',
@@ -1281,37 +1161,24 @@ export default function LandingPage() {
                 Contact
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
-                <div style={{ display: 'flex', gap: '.6rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#F39C12', flexShrink: 0 }}>📍</span>
-                  <span
-                    style={{ color: 'rgba(255,255,255,.6)', fontSize: '.85rem', lineHeight: 1.5 }}
-                  >
-                    Tunis, Tunisie
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}>
-                  <span style={{ color: '#F39C12', flexShrink: 0 }}>📞</span>
-                  <span style={{ color: 'rgba(255,255,255,.6)', fontSize: '.85rem' }}>
-                    +216 71 000 000
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}>
-                  <span style={{ color: '#F39C12', flexShrink: 0 }}>📧</span>
-                  <span style={{ color: 'rgba(255,255,255,.6)', fontSize: '.85rem' }}>
-                    contact@projectfinder.tn
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}>
-                  <span style={{ color: '#F39C12', flexShrink: 0 }}>🌐</span>
-                  <span style={{ color: 'rgba(255,255,255,.6)', fontSize: '.85rem' }}>
-                    www.projectfinder.tn
-                  </span>
-                </div>
+                {[
+                  ['📍', 'Tunis, Tunisie'],
+                  ['📞', '+216 71 000 000'],
+                  ['📧', 'contact@projectfinder.tn'],
+                  ['🌐', 'www.projectfinder.tn'],
+                ].map(([icon, val], i) => (
+                  <div key={i} style={{ display: 'flex', gap: '.6rem', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#F39C12', flexShrink: 0 }}>{icon}</span>
+                    <span
+                      style={{ color: 'rgba(255,255,255,.6)', fontSize: '.85rem', lineHeight: 1.5 }}
+                    >
+                      {val}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-
-          {/* Divider */}
           <div
             style={{
               borderTop: '1px solid rgba(255,255,255,.08)',
@@ -1324,27 +1191,25 @@ export default function LandingPage() {
             }}
           >
             <p style={{ color: 'rgba(255,255,255,.4)', fontSize: '.82rem' }}>
-              2026 Project Finder —  Tunisie
+              © 2026 Project Finder — Tunisie
             </p>
             <div style={{ display: 'flex', gap: '1.5rem' }}>
-              {['Politique de confidentialite', "Conditions d'utilisation", 'Cookies'].map(
-                (link) => (
-                  <a
-                    key={link}
-                    href="#"
-                    style={{
-                      color: 'rgba(255,255,255,.4)',
-                      fontSize: '.82rem',
-                      textDecoration: 'none',
-                      transition: 'color .2s',
-                    }}
-                    onMouseEnter={(e) => (e.target.style.color = '#F39C12')}
-                    onMouseLeave={(e) => (e.target.style.color = 'rgba(255,255,255,.4)')}
-                  >
-                    {link}
-                  </a>
-                )
-              )}
+              {['Politique de confidentialite', "Conditions d'utilisation"].map((label) => (
+                <a
+                  key={label}
+                  href="#"
+                  style={{
+                    color: 'rgba(255,255,255,.4)',
+                    fontSize: '.82rem',
+                    textDecoration: 'none',
+                    transition: 'color .2s',
+                  }}
+                  onMouseEnter={(e) => (e.target.style.color = '#F39C12')}
+                  onMouseLeave={(e) => (e.target.style.color = 'rgba(255,255,255,.4)')}
+                >
+                  {label}
+                </a>
+              ))}
             </div>
           </div>
         </div>

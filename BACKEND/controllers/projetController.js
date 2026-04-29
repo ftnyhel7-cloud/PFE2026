@@ -1,13 +1,25 @@
 const Projet = require('../models/Projet');
 const Etudiant = require('../models/Etudiant');
 const Notification = require('../models/Notification');
+const Encadrant = require('../models/Encadrant');
 
 // ─── CRÉER UN PROJET (Admin) ─────────────────────────
 exports.creerProjet = async (req, res) => {
   try {
+    let idEncadrant = req.body.idEncadrant;
+
+    // Si c'est un encadrant connecté, on force son propre idEncadrant
+    if (req.user?.role === 'ENCADRANT') {
+      const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
+      if (!encadrant) {
+        return res.status(404).json({ message: 'Profil encadrant introuvable' });
+      }
+      idEncadrant = encadrant._id;
+    }
+
     const projet = await Projet.create({
       idEtudiant: req.body.idEtudiant,
-      idEncadrant: req.body.idEncadrant,
+      idEncadrant,
       idSujet: req.body.idSujet,
       titre: req.body.titre,
       description: req.body.description,

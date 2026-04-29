@@ -1,100 +1,247 @@
-// On importe le modèle Messagerie
-const Messagerie = require('../models/Messagerie');
+// ═══════════════════════════════════════════════════════════
+//  BACKEND/controllers/messagerieController.js
+//  Messagerie sécurisée — affectation via Projet
+//  Étudiant ↔ son encadrant uniquement
+// ═══════════════════════════════════════════════════════════
+const Messagerie  = require('../models/Messagerie');
+const Projet      = require('../models/Projet');
+const Etudiant    = require('../models/Etudiant');
+const Encadrant   = require('../models/Encadrant');
+const Utilisateur = require('../models/Utilisateur');
 
-// ─── ENVOYER UN MESSAGE ──────────────────────────────
-exports.envoyerMessage = async (req, res) => {
+// ── Helper : résoudre l'interlocuteur autorisé ────────────
+// Vérifie que la conversation est autorisée selon l'affectation
+async function getInterlocuteurAutorise(userId, role, targetUserId) {
+  if (role === 'ETUDIANT') {
+    // L'étudiant ne peut parler qu'avec son encadrant
+    const etudiant = await Etudiant.findOne({ utilisateur: userId });
+    if (!etudiant) throw new Error('Profil étudiant introuvable');
+
+    const projet = await Projet.findOne({ idEtudiant: etudiant._id })
+      .populate({ path: 'idEncadrant', populate: { path: 'utilisateur', select: 'nom prenom image role email' } });
+
+    if (!projet) throw new Error('Aucun projet affecté');
+    if (!projet.idEncadrant) throw new Error('Aucun encadrant affecté');
+
+    const encadrantUserId = projet.idEncadrant.utilisateur?._id?.toString();
+
+    // Si targetUserId fourni, vérifier que c'est bien son encadrant
+    if (targetUserId && encadrantUserId !== targetUserId.toString()) {
+      throw new Error('Accès non autorisé à cette conversation');
+    }
+
+    return {
+      interlocuteur: projet.idEncadrant.utilisateur,
+      interlocuteurUserId: encadrantUserId,
+      projet,
+    };
+  }
+
+  if (role === 'ENCADRANT') {
+    // L'encadrant ne peut parler qu'avec ses étudiants assignés
+    const encadrant = await Encadrant.findOne({ utilisateur: userId });
+    if (!encadrant) throw new Error('Profil encadrant introuvable');
+
+    if (targetUserId) {
+      const etudiantUser = await Utilisateur.findById(targetUserId).select('nom prenom image role email');
+      if (!etudiantUser) throw new Error('Étudiant introuvable');
+
+      const etudiantDoc = await Etudiant.findOne({ utilisateur: targetUserId });
+      if (!etudiantDoc) throw new Error('Profil étudiant introuvable');
+
+      const projet = await Projet.findOne({
+        idEncadrant: encadrant._id,
+        idEtudiant:  etudiantDoc._id,
+      });
+      if (!projet) throw new Error('Cet étudiant n\'est pas dans vos étudiants assignés');
+
+      return { interlocuteur: etudiantUser, interlocuteurUserId: targetUserId, projet };
+    }
+    return null;
+  }
+
+  throw new Error('Rôle non autorisé');
+}
+
+// ─── GET /messagerie/mon-encadrant (étudiant) ────────────
+exports.getMonEncadrant = async (req, res) => {
   try {
-    // On crée le message avec les données du frontend
-    const message = await Messagerie.create({
-      idExpediteur: req.user._id, // l'utilisateur connecté qui envoie
-      idDestinataire: req.body.idDestinataire, // à qui on envoie
-      contenu: req.body.contenu, // le texte du message
+    const result = await getInterlocuteurAutorise(req.user._id, req.user.role);
+    return res.json({
+      encadrant: result.interlocuteur,
+      projet:    result.projet,
     });
-
-    // On répond avec le message créé
-    res.status(201).json(message);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(400).json({ message: err.message });
   }
 };
 
-// ─── CONVERSATION ENTRE 2 PERSONNES ─────────────────
-exports.getConversation = async (req, res) => {
+// ─── GET /messagerie/mes-etudiants (encadrant) ───────────
+exports.getMesEtudiants = async (req, res) => {
   try {
-    // On cherche tous les messages entre
-    // l'utilisateur connecté et l'autre utilisateur
-    // dans les 2 sens (envoyé ET reçu)
-    const messages = await Messagerie.find({
-      $or: [
-        // Sens 1 : moi → l'autre
-        {
-          idExpediteur: req.user._id,
-          idDestinataire: req.params.userId,
-        },
-        // Sens 2 : l'autre → moi
-        {
-          idExpediteur: req.params.userId,
+    const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
+    if (!encadrant) return res.status(404).json({ message: 'Profil encadrant introuvable' });
+
+    const projets = await Projet.find({ idEncadrant: encadrant._id })
+      .populate({
+        path:     'idEtudiant',
+        populate: { path: 'utilisateur', select: 'nom prenom image email role' },
+      })
+      .populate('idSujet', 'titre');
+
+    // Pour chaque étudiant, compter les non lus
+    const etudiants = await Promise.all(
+      projets.map(async p => {
+        const etudiantUserId = p.idEtudiant?.utilisateur?._id;
+        const nonLus = etudiantUserId ? await Messagerie.countDocuments({
+          idExpediteur:   etudiantUserId,
           idDestinataire: req.user._id,
-        },
-      ],
-    }).sort({ createdAt: 1 }); // triés du plus ancien au plus récent
+          lu: false,
+        }) : 0;
 
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─── MARQUER MESSAGES COMME LUS ──────────────────────
-exports.marquerCommeLus = async (req, res) => {
-  try {
-    // On met lu = true pour tous les messages
-    // envoyés par l'autre utilisateur vers moi
-    // que je n'ai pas encore lus
-    await Messagerie.updateMany(
-      {
-        idExpediteur: req.params.userId, // envoyés par l'autre
-        idDestinataire: req.user._id, // reçus par moi
-        lu: false, // pas encore lus
-      },
-      { lu: true } // on les marque comme lus
+        return {
+          userId:    etudiantUserId,
+          prenom:    p.idEtudiant?.utilisateur?.prenom,
+          nom:       p.idEtudiant?.utilisateur?.nom,
+          image:     p.idEtudiant?.utilisateur?.image,
+          email:     p.idEtudiant?.utilisateur?.email,
+          matricule: p.idEtudiant?.matricule,
+          sujetTitre:p.idSujet?.titre,
+          projetId:  p._id,
+          nonLus,
+        };
+      })
     );
 
-    res.json({ message: 'Messages marqués comme lus' });
+    return res.json(etudiants.filter(e => e.userId));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 };
 
-// ─── MESSAGES NON LUS ────────────────────────────────
-exports.messagesNonLus = async (req, res) => {
+// ─── GET /messagerie/conversation/:userId ────────────────
+exports.getConversation = async (req, res) => {
   try {
-    // On compte les messages non lus reçus par l'utilisateur connecté
-    const count = await Messagerie.countDocuments({
-      idDestinataire: req.user._id, // reçus par moi
-      lu: false, // pas encore lus
+    const { userId } = req.params;
+    const page  = parseInt(req.query.page)  || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip  = (page - 1) * limit;
+
+    // Vérifier que la conversation est autorisée
+    await getInterlocuteurAutorise(req.user._id, req.user.role, userId);
+
+    const messages = await Messagerie.find({
+      $or: [
+        { idExpediteur: req.user._id, idDestinataire: userId },
+        { idExpediteur: userId,        idDestinataire: req.user._id },
+      ],
+    })
+      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idDestinataire', 'nom prenom image role')
+      .sort({ createdAt: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Marquer comme lus automatiquement
+    await Messagerie.updateMany(
+      { idExpediteur: userId, idDestinataire: req.user._id, lu: false },
+      { lu: true }
+    );
+
+    return res.json(messages);
+  } catch (err) {
+    return res.status(403).json({ message: err.message });
+  }
+};
+
+// ─── POST /messagerie ────────────────────────────────────
+exports.envoyerMessage = async (req, res) => {
+  try {
+    const { idDestinataire, contenu } = req.body;
+    if (!idDestinataire || !contenu?.trim()) {
+      return res.status(400).json({ message: 'Destinataire et contenu requis' });
+    }
+
+    // Vérifier autorisation
+    await getInterlocuteurAutorise(req.user._id, req.user.role, idDestinataire);
+
+    const message = await Messagerie.create({
+      idExpediteur:   req.user._id,
+      idDestinataire,
+      contenu: contenu.trim(),
     });
 
-    res.json({ messagesNonLus: count });
+    const populated = await Messagerie.findById(message._id)
+      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idDestinataire', 'nom prenom image role');
+
+    // Émettre via Socket.IO au destinataire
+    const io = req.app.get('io');
+    if (io) {
+      io.to(idDestinataire.toString()).emit('nouveau_message', populated);
+    }
+
+    return res.status(201).json(populated);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(403).json({ message: err.message });
   }
 };
 
-// ─── LISTE DES CONVERSATIONS ─────────────────────────
+// ─── GET /messagerie/non-lus ─────────────────────────────
+exports.messagesNonLus = async (req, res) => {
+  try {
+    const count = await Messagerie.countDocuments({
+      idDestinataire: req.user._id,
+      lu: false,
+    });
+    return res.json({ messagesNonLus: count });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── GET /messagerie (liste conversations) ───────────────
 exports.getConversations = async (req, res) => {
   try {
-    // On trouve tous les messages où je suis impliqué
-    // soit comme expéditeur soit comme destinataire
+    const userId = req.user._id.toString();
+
     const messages = await Messagerie.find({
       $or: [{ idExpediteur: req.user._id }, { idDestinataire: req.user._id }],
     })
-      .populate('idExpediteur', 'nom prenom image') // affiche nom + photo
-      .populate('idDestinataire', 'nom prenom image') // affiche nom + photo
-      .sort({ createdAt: -1 }); // du plus récent au plus ancien
+      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idDestinataire', 'nom prenom image role')
+      .sort({ createdAt: -1 });
 
-    res.json(messages);
+    const map = new Map();
+    for (const msg of messages) {
+      const autre = msg.idExpediteur?._id?.toString() === userId
+        ? msg.idDestinataire : msg.idExpediteur;
+      if (!autre) continue;
+      const autreId = autre._id.toString();
+      if (!map.has(autreId)) {
+        const nonLus = await Messagerie.countDocuments({
+          idExpediteur:   autre._id,
+          idDestinataire: req.user._id,
+          lu: false,
+        });
+        map.set(autreId, { interlocuteur: autre, dernierMessage: msg, nonLus });
+      }
+    }
+    return res.json(Array.from(map.values()));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── PUT /messagerie/:userId/lus ─────────────────────────
+exports.marquerCommeLus = async (req, res) => {
+  try {
+    await Messagerie.updateMany(
+      { idExpediteur: req.params.userId, idDestinataire: req.user._id, lu: false },
+      { lu: true }
+    );
+    return res.json({ message: 'Messages marqués comme lus' });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 };
