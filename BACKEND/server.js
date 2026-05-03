@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-//  BACKEND/server.js — Express + Socket.IO intégré
+//  BACKEND/server.js — Version complète avec nouveaux modules
+//  Seule la section "Routes" change par rapport à l'original
 // ═══════════════════════════════════════════════════════════
 const express = require('express');
 const http = require('http');
@@ -34,7 +35,6 @@ const io = new Server(server, {
   },
 });
 
-// Middleware auth Socket.IO — vérifie le JWT
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error('Token manquant'));
@@ -49,13 +49,10 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  // Rejoindre la room personnelle (userId)
   socket.join(socket.userId);
-
   socket.on('disconnect', () => {});
 });
 
-// Exporter io pour l'utiliser dans les controllers
 app.set('io', io);
 
 // ── Middlewares ───────────────────────────────────────────
@@ -76,20 +73,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ── Routes ───────────────────────────────────────────────
+// ── Routes existantes ─────────────────────────────────────
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/sujets', require('./routes/sujetRoutes'));
 app.use('/api/projets', require('./routes/projetRoutes'));
 app.use('/api/taches', require('./routes/tacheRoutes'));
 app.use('/api/calendrier', require('./routes/calendrierRoutes'));
 app.use('/api/messagerie', require('./routes/messagerieRoutes'));
-app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes')); // ← version mise à jour
 app.use('/api/candidatures', require('./routes/candidatureRoutes'));
 app.use('/api/etudiants', require('./routes/etudiantRoutes'));
 app.use('/api/encadrants', require('./routes/encadrantRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/referentiels', require('./routes/referentielRoutes'));
 app.use('/api/support', require('./routes/supportRoutes'));
+
+// ── ✅ NOUVELLES ROUTES ────────────────────────────────────
+app.use('/api/evaluations', require('./routes/evaluationRoutes'));
+app.use('/api/publications', require('./routes/publicationRoutes'));
+app.use('/api/feedbacks', require('./routes/feedbackRoutes'));
 
 // ── Erreurs ───────────────────────────────────────────────
 app.use((err, req, res, next) => {
