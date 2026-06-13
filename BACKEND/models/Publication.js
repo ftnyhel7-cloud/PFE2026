@@ -50,11 +50,6 @@ const publicationSchema = new mongoose.Schema(
 );
 
 // Quand on publie, enregistrer la date
-publicationSchema.pre('save', function (next) {
-  if (this.isModified('statut') && this.statut === 'PUBLIE' && !this.datePublication) {
-    this.datePublication = new Date();
-  }
-  next();
-});
+
 
 module.exports = mongoose.model('Publication', publicationSchema);

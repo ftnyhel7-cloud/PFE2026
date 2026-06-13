@@ -470,9 +470,7 @@ export default function Register() {
             >
               Creer un compte
             </h1>
-            <p style={{ color: '#777', fontSize: '.9rem' }}>
-              Rejoignez la plateforme Project Finder
-            </p>
+            <p style={{ color: '#777', fontSize: '.9rem' }}>Rejoignez la plateforme SmartPFE</p>
           </div>
 
           {/* ── Stepper ── */}

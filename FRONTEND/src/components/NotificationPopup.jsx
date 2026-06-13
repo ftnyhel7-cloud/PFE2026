@@ -114,8 +114,9 @@ export default function NotificationPopup({ notifications = [], onClose }) {
   useEffect(() => {
     if (notifications.length === 0) return;
 
-    setLocalNotifs(notifications);
-
+    const filtered = notifications.filter((n) => n.type !== 'SYSTEME');
+    if (filtered.length === 0) return;
+    setLocalNotifs(filtered);
     // Petit délai pour l'animation d'entrée
     const t = setTimeout(() => setVisible(true), 400);
 

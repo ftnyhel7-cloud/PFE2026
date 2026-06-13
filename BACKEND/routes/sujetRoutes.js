@@ -9,6 +9,7 @@ const {
   getSujetsNonValides,
   mesSujets,
   supprimerSujet,
+  modifierSujet,
 } = require('../controllers/sujetController');
 
 // On importe les middlewares
@@ -46,6 +47,16 @@ router.put('/:id/valider', protect, authorizeRoles('ADMINISTRATEUR'), validerSuj
 // Supprimer un sujet
 // Encadrant ou Administrateur
 router.delete('/:id', protect, authorizeRoles('ENCADRANT', 'ADMINISTRATEUR'), supprimerSujet);
+
+router.put('/:id', protect, authorizeRoles('ENCADRANT'), modifierSujet);
+
+// PUT /api/sujets/:id/delai — Admin définit le délai de postulation
+router.put(
+  '/:id/delai',
+  protect,
+  authorizeRoles('ADMINISTRATEUR'),
+  require('../controllers/sujetController').setDelaiPostulation
+);
 
 // On exporte le router
 module.exports = router;

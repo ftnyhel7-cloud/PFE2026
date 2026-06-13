@@ -5,19 +5,18 @@ const Encadrant = require('../models/Encadrant');
 // ─── PROPOSER UN SUJET (Encadrant) ──────────────────
 exports.proposerSujet = async (req, res) => {
   try {
-    // 1. Trouver le profil encadrant
     const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
-    if (!encadrant) {
-      return res.status(404).json({ message: 'Profil encadrant introuvable' });
-    }
+    if (!encadrant) return res.status(404).json({ message: 'Profil encadrant introuvable' });
 
-    // 2. Créer le sujet
     const sujet = await Sujet.create({
       idEncadrant: encadrant._id,
       titre: req.body.titre,
       description: req.body.description,
-      reference: req.body.reference,
-      technologies: req.body.technologies,
+      reference: req.body.reference || '',
+      technologies: req.body.technologies || [],
+      domaine: req.body.domaine || '',
+      niveau: req.body.niveau || '',
+      places: req.body.places || 1,
     });
 
     res.status(201).json(sujet);
@@ -29,17 +28,14 @@ exports.proposerSujet = async (req, res) => {
 // ─── VALIDER UN SUJET (Admin) ────────────────────────
 exports.validerSujet = async (req, res) => {
   try {
-    // 1. Trouver le sujet
     const sujet = await Sujet.findById(req.params.id);
     if (!sujet) {
       return res.status(404).json({ message: 'Sujet introuvable' });
     }
 
-    // 2. Valider le sujet
     sujet.valide = true;
     await sujet.save();
 
-    // 3. Notifier l'encadrant
     const encadrant = await Encadrant.findById(sujet.idEncadrant);
     await Notification.create({
       idUtilisateur: encadrant.utilisateur,
@@ -55,19 +51,24 @@ exports.validerSujet = async (req, res) => {
 };
 
 // ─── LISTE DES SUJETS VALIDÉS (Tous) ────────────────
-// ─── LISTE DES SUJETS VALIDÉS ────────────────────────
 exports.getSujets = async (req, res) => {
   try {
-    const sujets = await Sujet.find({ valide: true })
-      .populate({
-        path: 'idEncadrant',           // charge les infos de l'encadrant
-        populate: {
-          path: 'utilisateur',          // charge les infos utilisateur de l'encadrant
-          select: 'nom prenom email'    // seulement ces champs
-        }
-      });
+    const sujets = await Sujet.find({ valide: true }).populate({
+      path: 'idEncadrant',
+      populate: {
+        path: 'utilisateur',
+        select: 'nom prenom email',
+      },
+    });
 
-    res.json(sujets);
+    // ✅ Un seul res.json() — l'ancien doublon a été supprimé
+    return res.json(
+      sujets.map((s) => ({
+        ...s.toObject(),
+        statut: 'VALIDE',
+        disponibilite: s.disponibilite || 'DISPONIBLE',
+      }))
+    );
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -77,7 +78,7 @@ exports.getSujets = async (req, res) => {
 exports.getSujetsNonValides = async (req, res) => {
   try {
     const sujets = await Sujet.find({ valide: false }).populate('idEncadrant');
-    res.json(sujets);
+    res.json(sujets.map((s) => ({ ...s.toObject(), statut: 'EN_ATTENTE' })));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -104,6 +105,51 @@ exports.supprimerSujet = async (req, res) => {
 
     await sujet.deleteOne();
     res.json({ message: 'Sujet supprimé avec succès' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+//sujet modifier
+exports.modifierSujet = async (req, res) => {
+  try {
+    const sujet = await Sujet.findById(req.params.id);
+    if (!sujet) return res.status(404).json({ message: 'Sujet introuvable' });
+
+    // Pas de vérification stricte — l'encadrant connecté peut modifier
+    const { titre, description, technologies, domaine, niveau, places } = req.body;
+    if (titre) sujet.titre = titre;
+    if (description) sujet.description = description;
+    if (technologies) sujet.technologies = technologies;
+    if (domaine) sujet.domaine = domaine;
+    if (niveau) sujet.niveau = niveau;
+    if (places) sujet.places = places;
+
+    await sujet.save();
+    res.json(sujet);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── DÉFINIR LE DÉLAI DE POSTULATION (admin) ─────────────
+exports.setDelaiPostulation = async (req, res) => {
+  try {
+    const { dateDebutPostulation, dateFinPostulation, maxCandidatsInterview } = req.body;
+
+    const update = {};
+    if (dateDebutPostulation !== undefined)
+      update.dateDebutPostulation = dateDebutPostulation ? new Date(dateDebutPostulation) : null;
+    if (dateFinPostulation !== undefined)
+      update.dateFinPostulation = dateFinPostulation ? new Date(dateFinPostulation) : null;
+    if (maxCandidatsInterview !== undefined)
+      update.maxCandidatsInterview = parseInt(maxCandidatsInterview) || 5;
+
+    const sujet = await require('../models/Sujet').findByIdAndUpdate(req.params.id, update, {
+      new: true,
+    });
+    if (!sujet) return res.status(404).json({ message: 'Sujet introuvable' });
+
+    res.json({ message: 'Délai de postulation mis à jour.', sujet });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -47,7 +47,7 @@ exports.laisserFeedback = async (req, res) => {
     if (exist) {
       return res.status(409).json({ message: 'Vous avez déjà laissé un avis' });
     }
-
+    console.log('👤 User qui envoie le feedback:', req.user?.prenom, req.user?.role);
     const fb = await Feedback.create({
       auteur: req.user._id,
       nomAuteur: `${req.user.prenom} ${req.user.nom}`,
@@ -55,6 +55,26 @@ exports.laisserFeedback = async (req, res) => {
       note,
       commentaire: commentaire.trim(),
     });
+
+    // ── Notification aux admins ──────────────────────────────
+    try {
+      const Notification = require('../models/Notification');
+      const Utilisateur = require('../models/Utilisateur');
+      const admins = await Utilisateur.find({ role: 'ADMINISTRATEUR' }).select('_id');
+      await Promise.all(
+        admins.map((admin) =>
+          Notification.create({
+            idUtilisateur: admin._id,
+            titre: 'Nouveau feedback reçu',
+            contenu: `${req.user.prenom} ${req.user.nom} a laissé un avis (${note}/5) : "${commentaire.trim().slice(0, 80)}${commentaire.length > 80 ? '...' : ''}"`,
+            type: 'SYSTEME',
+            lu: false,
+          })
+        )
+      );
+    } catch (notifErr) {
+      console.error('Erreur notification feedback:', notifErr.message);
+    }
 
     res.status(201).json(fb);
   } catch (err) {
@@ -87,7 +107,23 @@ exports.supprimerFeedback = async (req, res) => {
   try {
     const fb = await Feedback.findByIdAndDelete(req.params.id);
     if (!fb) return res.status(404).json({ message: 'Feedback introuvable' });
-    res.json({ message: 'Feedback supprimé' });
+
+    // ── Notification à l'admin qui a effectué la suppression ──
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        idUtilisateur: req.user._id,
+        titre: 'Avis supprimé',
+        contenu: `L'avis de "${fb.nomAuteur}" (${fb.note}/5) a été supprimé avec succès.`,
+        type: 'SYSTEME',
+        lu: false,
+        envoyePar: req.user._id,
+      });
+    } catch (notifErr) {
+      console.error('Erreur notification suppression feedback:', notifErr.message);
+    }
+
+    res.json({ message: "L'avis a été supprimé" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

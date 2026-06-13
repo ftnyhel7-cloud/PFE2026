@@ -14,6 +14,17 @@ import ParametresPage from './pages/ParametresPage';
 import PolitiqueConfidentialite from './pages/PolitiqueConfidentialite';
 import ConditionsUtilisation from './pages/ConditionsUtilisation';
 import MessagerieePage from './pages/MessagerieePage';
+import SujetsPage from './pages/dashboard/SujetsPage';
+import QuizPage from './pages/dashboard/QuizPage';
+import { NotifProvider } from './context/NotificationsContext';
+import PublicationsPage from './pages/PublicationsPage';
+import FeedbacksPage from './pages/FeedbacksPage';
+import CalendrierPage from './pages/dashboard/CalendrierPage';
+import GuidePFEPage from './pages/dashboard/GuidePFEPage';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import CandidaturePage from './pages/dashboard/CandidaturePage';
+import ResetPassword from './pages/auth/ResetPassword';
+
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -101,6 +112,16 @@ function AppRoutes() {
             </PublicOnlyRoute>
           }
         />
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicOnlyRoute>
+              <ForgotPassword />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/quiz/token/:token" element={<QuizPage />} />
 
         {/* ── Protégées ── */}
         <Route
@@ -143,10 +164,61 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/sujets"
+          element={
+            <ProtectedRoute>
+              <SujetsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/quiz/:candidatureId"
+          element={
+            <ProtectedRoute>
+              <QuizPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/candidature/:idSujet"
+          element={
+            <ProtectedRoute>
+              <CandidaturePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route // ← ajouter
+          path="/publications"
+          element={
+            <ProtectedRoute>
+              <PublicationsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route // ← ajouter
+          path="/feedbacks"
+          element={
+            <ProtectedRoute>
+              <FeedbacksPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route // ← ajouter
+          path="/calendrier"
+          element={
+            <ProtectedRoute>
+              <CalendrierPage />
+            </ProtectedRoute>
+          }
+        />
+
 
         {/* ── Redirections ── */}
         <Route path="/" element={<Navigate to="/accueil" replace />} />
         <Route path="*" element={<Navigate to="/accueil" replace />} />
+
+        <Route path="/guide-pfe" element={<GuidePFEPage />} />
       </Routes>
     </>
   );
@@ -156,9 +228,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AxiosSetup />
-        <AppRoutes />
+        <NotifProvider>
+          <AxiosSetup />
+          <AppRoutes />
+        </NotifProvider>
       </AuthProvider>
     </BrowserRouter>
   );
 }
+

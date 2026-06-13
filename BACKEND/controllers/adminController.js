@@ -34,7 +34,9 @@ exports.getUsers = async (req, res) => {
 
     const total = await Utilisateur.countDocuments(filter);
     const users = await Utilisateur.find(filter)
-      .select('-mot_de_passe -refreshToken -refreshTokenExpiry -resetPasswordToken -resetPasswordExpiry')
+      .select(
+        '-mot_de_passe -refreshToken -refreshTokenExpiry -resetPasswordToken -resetPasswordExpiry'
+      )
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -68,7 +70,8 @@ exports.validateUser = async (req, res) => {
     await Notification.create({
       idUtilisateur: user._id,
       titre: '✅ Compte validé',
-      contenu: 'Votre compte a été validé par l\'administrateur ! Vous pouvez maintenant accéder à la plateforme.',
+      contenu:
+        "Votre compte a été validé par l'administrateur ! Vous pouvez maintenant accéder à la plateforme.",
       type: 'VALIDATION',
     });
 
@@ -85,7 +88,7 @@ exports.validateUser = async (req, res) => {
     try {
       await sendEmail({
         to: user.email,
-        subject: '[Project Finder] ✅ Votre compte a été validé !',
+        subject: '[SmartPFE] ✅ Votre compte a été validé !',
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
             <div style="background:linear-gradient(135deg,#059669,#10B981);padding:20px;text-align:center;border-radius:6px 6px 0 0;">
@@ -93,14 +96,14 @@ exports.validateUser = async (req, res) => {
             </div>
             <div style="padding:24px;border:1px solid #e0e0e0;border-radius:0 0 6px 6px;">
               <p>Bonjour <strong>${user.prenom}</strong>,</p>
-              <p>Votre compte sur <strong>Project Finder</strong> a été validé par l'administrateur.</p>
+              <p>Votre compte sur <strong>SmartPFE</strong> a été validé par l'administrateur.</p>
               <p>Vous pouvez maintenant vous connecter et accéder à toutes les fonctionnalités de la plateforme.</p>
               <div style="text-align:center;margin:24px 0;">
                 <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" style="background:#059669;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">
                   Se connecter
                 </a>
               </div>
-              <p>Cordialement,<br/><strong>L'équipe Project Finder</strong></p>
+              <p>Cordialement,<br/><strong>L'équipe SmartPFE</strong></p>
             </div>
           </div>`,
       });
@@ -124,7 +127,9 @@ exports.rejectUser = async (req, res) => {
 
     // Empêcher la suppression d'un admin
     if (user.role === 'ADMINISTRATEUR') {
-      return res.status(403).json({ status: 'error', message: 'Impossible de supprimer un administrateur' });
+      return res
+        .status(403)
+        .json({ status: 'error', message: 'Impossible de supprimer un administrateur' });
     }
 
     // Supprimer le profil associé
@@ -277,6 +282,7 @@ exports.sendNotification = async (req, res) => {
       titre,
       contenu,
       type,
+      envoyePar: req.user._id, // ✅ Traçabilité pour l'historique admin
     }));
 
     await Notification.insertMany(notifications);
@@ -344,11 +350,11 @@ exports.replyMessage = async (req, res) => {
     try {
       await sendEmail({
         to: msg.email,
-        subject: `[Project Finder] Réponse : ${msg.sujet}`,
+        subject: `[SmartPFE] Réponse : ${msg.sujet}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
             <div style="background:#1a7a8a;padding:20px;text-align:center;border-radius:6px 6px 0 0;">
-              <h1 style="color:#fff;margin:0;">🎓 Project Finder — Support</h1>
+              <h1 style="color:#fff;margin:0;">🎓 SmartPFE — Support</h1>
             </div>
             <div style="padding:24px;border:1px solid #e0e0e0;border-radius:0 0 6px 6px;">
               <p>Bonjour <strong>${msg.nom}</strong>,</p>
@@ -356,7 +362,7 @@ exports.replyMessage = async (req, res) => {
               <div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #1a7a8a;">
                 <p style="margin:0;white-space:pre-wrap;">${reponse}</p>
               </div>
-              <p>Cordialement,<br/><strong>L'équipe Project Finder</strong></p>
+              <p>Cordialement,<br/><strong>L'équipe SmartPFE</strong></p>
             </div>
           </div>`,
       });
@@ -451,5 +457,146 @@ exports.getAffectations = async (req, res) => {
     res.json(projets);
   } catch (error) {
     res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────
+//  HISTORIQUE DES NOTIFICATIONS ENVOYÉES PAR L'ADMIN
+//  Route : GET /api/admin/notifications/historique
+// ─────────────────────────────────────────────────────────
+exports.getNotificationsHistorique = async (req, res) => {
+  try {
+    // Récupère toutes les notifications envoyées par cet admin
+    // groupées par titre+contenu pour éviter les doublons (1 notif = N destinataires)
+    const historique = await Notification.aggregate([
+      { $match: { envoyePar: req.user._id } },
+      {
+        $group: {
+          _id: { titre: '$titre', contenu: '$contenu', type: '$type' },
+          titre: { $first: '$titre' },
+          contenu: { $first: '$contenu' },
+          type: { $first: '$type' },
+          nbDestinataires: { $sum: 1 },
+          createdAt: { $first: '$createdAt' },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 50 },
+    ]);
+
+    res.json(historique);
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+// nouveau
+// ─── CONFIG ───────────────────────────────────────────────────
+const Config = require('../models/Config');
+
+const CONFIG_DEFAULTS = {
+  nomPlateforme: 'SmartPFE PFE',
+  couleurPrimaire: '#2d9e6b',
+  theme: 'light',
+  notificationsEmail: true,
+  delaiCandidature: 14,
+  validationAutomatique: false,
+  maxSujetsParEncadrant: 5,
+  dureeSessionMinutes: 60,
+  tentativesMaxConnexion: 5,
+  scoreMinimumMatching: 60,
+  quizActif: true,
+  nombreQuestionsQuiz: 5,
+};
+
+exports.getConfig = async (req, res) => {
+  try {
+    const docs = await Config.find({});
+    const config = { ...CONFIG_DEFAULTS };
+    docs.forEach((d) => {
+      config[d.cle] = d.valeur;
+    });
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateConfig = async (req, res) => {
+  try {
+    const updates = req.body;
+    const ops = Object.entries(updates).map(([cle, valeur]) => ({
+      updateOne: {
+        filter: { cle },
+        update: { $set: { cle, valeur } },
+        upsert: true,
+      },
+    }));
+    if (ops.length > 0) await Config.bulkWrite(ops);
+    res.json({ message: 'Configuration sauvegardée' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { prenom, nom, email, role, telephone, codeReference } = req.body;
+    const user = await Utilisateur.findByIdAndUpdate(
+      req.params.id,
+      { prenom, nom, email, role, telephone, codeReference },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.createUser = async (req, res) => {
+  try {
+    const { prenom, nom, email, mot_de_passe, role, telephone } = req.body;
+
+    // Vérifier si l'email existe déjà
+    const existing = await Utilisateur.findOne({ email });
+    if (existing) return res.status(400).json({ message: 'Email déjà utilisé' });
+
+    // Générer le codeReference automatiquement
+    const year = new Date().getFullYear();
+    const prefix =
+      (role || 'ETUDIANT') === 'ETUDIANT'
+        ? 'MAT'
+        : (role || 'ETUDIANT') === 'ENCADRANT'
+          ? 'ENC'
+          : 'ADM';
+
+    // Trouver le dernier code de ce type pour cette année
+    const lastUser = await Utilisateur.findOne({
+      codeReference: { $regex: `^${prefix}${year}` },
+    }).sort({ codeReference: -1 });
+
+    let nextNum = 1;
+    if (lastUser && lastUser.codeReference) {
+      const lastNum = parseInt(lastUser.codeReference.replace(`${prefix}${year}`, ''));
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
+    }
+
+    const codeReference = `${prefix}${year}${String(nextNum).padStart(3, '0')}`;
+    const newUser = new Utilisateur({
+      prenom,
+      nom,
+      email,
+      mot_de_passe,
+      role,
+      telephone,
+      codeReference,
+      isValidated: true,
+    });
+
+    await newUser.save();
+    res.status(201).json(newUser);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

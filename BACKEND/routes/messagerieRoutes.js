@@ -12,5 +12,5 @@ router.get('/mes-etudiants', protect, ctrl.getMesEtudiants); // encadrant
 router.get('/conversation/:userId', protect, ctrl.getConversation);
 router.post('/', protect, ctrl.envoyerMessage);
 router.put('/:userId/lus', protect, ctrl.marquerCommeLus);
-
+router.post('/typing', protect, ctrl.sendTyping);
 module.exports = router;

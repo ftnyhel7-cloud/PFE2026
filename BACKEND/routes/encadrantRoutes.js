@@ -1,39 +1,38 @@
+// ═══════════════════════════════════════════════════════════
+//  BACKEND/routes/encadrantRoutes.js
+//  ✅ FIX : suppression du SVG JSX qui causait le crash Node.js
+// ═══════════════════════════════════════════════════════════
 const router = require('express').Router();
 const { protect } = require('../middleware/authMiddleware');
 const Encadrant = require('../models/Encadrant');
 const Projet = require('../models/Projet');
 
-// GET /api/encadrants/mon-profil
+// ── GET /api/encadrants/mon-profil ───────────────────────────
 router.get('/mon-profil', protect, async (req, res) => {
   try {
     const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
-
     if (!encadrant) {
       return res.status(404).json({ message: 'Profil encadrant introuvable' });
     }
-
     res.json(encadrant);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// PUT /api/encadrants/mon-profil
+// ── PUT /api/encadrants/mon-profil ───────────────────────────
 router.put('/mon-profil', protect, async (req, res) => {
   try {
     const encadrant = await Encadrant.findOneAndUpdate({ utilisateur: req.user._id }, req.body, {
       new: true,
     });
-
     res.json(encadrant);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// ── GET /api/encadrants/mes-etudiants ────────────────────
-// Récupère les étudiants dont le PFE est assigné à cet encadrant
-// L'accès est conditionné à la validation du PFE (projet créé)
+// ── GET /api/encadrants/mes-etudiants ────────────────────────
 router.get('/mes-etudiants', protect, async (req, res) => {
   try {
     const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
@@ -41,7 +40,6 @@ router.get('/mes-etudiants', protect, async (req, res) => {
       return res.status(404).json({ message: 'Profil encadrant introuvable' });
     }
 
-    // Chercher tous les projets de cet encadrant
     const projets = await Projet.find({ idEncadrant: encadrant._id })
       .populate({
         path: 'idEtudiant',
@@ -50,7 +48,6 @@ router.get('/mes-etudiants', protect, async (req, res) => {
       .populate('idSujet')
       .sort({ createdAt: -1 });
 
-    // Formater les données pour le frontend
     const etudiants = projets.map((projet) => ({
       projet: {
         _id: projet._id,
@@ -79,4 +76,3 @@ router.get('/mes-etudiants', protect, async (req, res) => {
 });
 
 module.exports = router;
-

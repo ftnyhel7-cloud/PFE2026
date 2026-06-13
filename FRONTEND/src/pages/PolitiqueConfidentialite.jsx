@@ -9,7 +9,7 @@ const SECTIONS = [
     num: '01',
     titre: 'Responsable du traitement',
     contenu:
-      "Project Finder est une plateforme universitaire de gestion des projets de fin d'etudes editee par Project Finder University, dont le siege est situe a Tunis, Tunisie. En tant que responsable de traitement, nous nous engageons a proteger la confidentialite et la securite de vos donnees personnelles conformement a la loi organique tunisienne n 2004-63 du 27 juillet 2004 portant sur la protection des donnees a caractere personnel.",
+      "SmartPFE est une plateforme universitaire de gestion des projets de fin d'etudes editee par SmartPFE University, dont le siege est situe a Tunis, Tunisie. En tant que responsable de traitement, nous nous engageons a proteger la confidentialite et la securite de vos donnees personnelles conformement a la loi organique tunisienne n 2004-63 du 27 juillet 2004 portant sur la protection des donnees a caractere personnel.",
   },
   {
     num: '02',
@@ -63,7 +63,7 @@ const SECTIONS = [
     num: '10',
     titre: 'Contact et reclamations',
     contenu:
-      "Pour toute question relative a vos donnees personnelles :\n\nEmail : privacy@projectfinder.tn\nAdresse : Project Finder University, Avenue Habib Bourguiba, 1000 Tunis\nTelephone : +216 71 000 000\n\nEn cas de litige, vous pouvez saisir l'Instance Nationale de Protection des Donnees Personnelles (INPDP) de Tunisie.",
+      "Pour toute question relative a vos donnees personnelles :\n\nEmail : privacy@projectfinder.tn\nAdresse : SmartPFE University, Avenue Habib Bourguiba, 1000 Tunis\nTelephone : +216 71 000 000\n\nEn cas de litige, vous pouvez saisir l'Instance Nationale de Protection des Donnees Personnelles (INPDP) de Tunisie.",
   },
 ];
 
@@ -236,8 +236,8 @@ export default function PolitiqueConfidentialite() {
         >
           <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>ℹ️</span>
           <p style={{ color: '#555', fontSize: '.88rem', lineHeight: 1.7 }}>
-            En utilisant la plateforme Project Finder, vous acceptez les termes de cette politique.
-            Elle s'applique a tous les utilisateurs : etudiants, encadrants et administrateurs.
+            En utilisant la plateforme SmartPFE, vous acceptez les termes de cette politique. Elle
+            s'applique a tous les utilisateurs : etudiants, encadrants et administrateurs.
           </p>
         </div>
 

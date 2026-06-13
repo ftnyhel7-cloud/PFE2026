@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-//  BACKEND/models/Notification.js
+//  BACKEND/models/Notification.js  ✅ CORRIGÉ
+//  Ajout du champ envoyePar pour l'historique admin
 // ═══════════════════════════════════════════════════════════
 const mongoose = require('mongoose');
 
@@ -14,16 +15,19 @@ const notificationSchema = new mongoose.Schema(
     contenu: { type: String, required: true },
     type: {
       type: String,
-      enum: ['TACHE', 'LIVRABLE', 'VALIDATION', 'REUNION', 'SYSTEME', 'AFFECTATION'],
+      enum: ['TACHE', 'LIVRABLE', 'VALIDATION', 'REUNION', 'SYSTEME', 'AFFECTATION', 'EVALUATION'],
       required: true,
     },
-    // ── Champ existant ───────────────────────────────────
     lu: { type: Boolean, default: false },
-
-    // ── Nouveau champ : popup déjà affichée ? ────────────
-    // true  = popup déjà montrée → ne plus l'afficher au login
-    // false = nouvelle notif → afficher la popup une seule fois
     isPopupShown: { type: Boolean, default: false },
+
+    // ── Qui a envoyé cette notification (admin) ──────────
+    // Permet à l'admin de voir l'historique de ce qu'il a envoyé
+    envoyePar: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Utilisateur',
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -1,30 +1,23 @@
-// On importe express pour créer le router
 const router = require('express').Router();
-
-// On importe les fonctions du controller
 const {
   creerTache,
   getTachesByProjet,
   mesTaches,
+  mesTachesEncadrant, // ✅ NOUVEAU
   changerStatutTache,
   supprimerTache,
   modifierTache,
 } = require('../controllers/tacheController');
-
-// On importe les middlewares
 const { protect } = require('../middleware/authMiddleware');
 const { authorizeRoles } = require('../middleware/roleMiddleware');
 
-// ─── ROUTES TÂCHES ───────────────────────────────────
-
-// GET http://localhost:5000/api/taches/mes-taches
-// Voir mes tâches
-// Seulement l'étudiant
+// GET /api/taches/mes-taches          → étudiant voit ses tâches
 router.get('/mes-taches', protect, authorizeRoles('ETUDIANT'), mesTaches);
 
-// GET http://localhost:5000/api/taches/projet/:projetId
-// Voir toutes les tâches d'un projet
-// Etudiant et Encadrant
+// GET /api/taches/mes-taches-encadrant → encadrant voit toutes ses tâches créées ✅ NOUVEAU
+router.get('/mes-taches-encadrant', protect, authorizeRoles('ENCADRANT'), mesTachesEncadrant);
+
+// GET /api/taches/projet/:projetId    → tâches d'un projet
 router.get(
   '/projet/:projetId',
   protect,
@@ -32,25 +25,16 @@ router.get(
   getTachesByProjet
 );
 
-// POST http://localhost:5000/api/taches
-// Créer une tâche
-// Seulement l'encadrant
+// POST /api/taches                    → créer une tâche
 router.post('/', protect, authorizeRoles('ENCADRANT'), creerTache);
 
-// PUT http://localhost:5000/api/taches/:id
-// Modifier une tâche
-// Seulement l'encadrant
+// PUT /api/taches/:id                 → modifier une tâche
 router.put('/:id', protect, authorizeRoles('ENCADRANT'), modifierTache);
 
-// PUT http://localhost:5000/api/taches/:id/statut
-// Changer le statut d'une tâche
-// Seulement l'étudiant
+// PUT /api/taches/:id/statut          → changer statut (étudiant)
 router.put('/:id/statut', protect, authorizeRoles('ETUDIANT'), changerStatutTache);
 
-// DELETE http://localhost:5000/api/taches/:id
-// Supprimer une tâche
-// Seulement l'encadrant
+// DELETE /api/taches/:id              → supprimer une tâche
 router.delete('/:id', protect, authorizeRoles('ENCADRANT'), supprimerTache);
 
-// On exporte le router
 module.exports = router;

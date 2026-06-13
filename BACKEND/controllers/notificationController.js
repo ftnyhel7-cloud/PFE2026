@@ -1,5 +1,6 @@
 // On importe le modèle Notification
 const Notification = require('../models/Notification');
+const { creerEtEnvoyerNotif } = require('../utils/pusher');
 
 // ─── MES NOTIFICATIONS ───────────────────────────────
 exports.mesNotifications = async (req, res) => {
@@ -105,6 +106,26 @@ exports.supprimerToutesNotifications = async (req, res) => {
     });
 
     res.json({ message: 'Toutes les notifications supprimées' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── ENVOYER NOTIF TEMPS RÉEL (admin → utilisateur ciblé) ───
+exports.envoyerNotification = async (req, res) => {
+  try {
+    const { idUtilisateur, titre, contenu, type = 'SYSTEME' } = req.body;
+    if (!idUtilisateur || !titre || !contenu)
+      return res.status(400).json({ message: 'idUtilisateur, titre et contenu requis' });
+
+    const notif = await creerEtEnvoyerNotif({
+      idUtilisateur,
+      titre,
+      contenu,
+      type,
+      envoyePar: req.user._id,
+    });
+    res.status(201).json(notif);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

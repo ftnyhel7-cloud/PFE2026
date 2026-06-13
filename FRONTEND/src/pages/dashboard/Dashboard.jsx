@@ -47,9 +47,9 @@ function Dashboard() {
     }
 
     // ❌ Pas encore validé → page sujets seulement
-    return (
-      <SujetsPage />
-    );
+    
+      return <DashboardEtudiant />;
+    
   }
 
   return null;

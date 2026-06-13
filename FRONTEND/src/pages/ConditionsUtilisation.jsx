@@ -9,13 +9,13 @@ const SECTIONS = [
     num: '01',
     titre: 'Acceptation des conditions',
     contenu:
-      "En accedant a la plateforme Project Finder et en creant un compte, vous acceptez sans reserve les presentes Conditions Generales d'Utilisation (CGU). Ces conditions constituent un contrat juridiquement contraignant entre vous et Project Finder University.\n\nSi vous etes mineur (moins de 18 ans), l'utilisation requiert l'autorisation de votre representant legal.\n\nNous nous reservons le droit de modifier ces conditions a tout moment. Les modifications entrent en vigueur 30 jours apres publication. L'utilisation continuee vaut acceptation.",
+      "En accedant a la plateforme SmartPFE et en creant un compte, vous acceptez sans reserve les presentes Conditions Generales d'Utilisation (CGU). Ces conditions constituent un contrat juridiquement contraignant entre vous et SmartPFE University.\n\nSi vous etes mineur (moins de 18 ans), l'utilisation requiert l'autorisation de votre representant legal.\n\nNous nous reservons le droit de modifier ces conditions a tout moment. Les modifications entrent en vigueur 30 jours apres publication. L'utilisation continuee vaut acceptation.",
   },
   {
     num: '02',
     titre: 'Description du service',
     contenu:
-      "Project Finder est une plateforme numerique universitaire permettant :\n\nPour les etudiants :\n• Consultation et recherche de sujets PFE disponibles\n• Depot de candidatures avec CV et lettre de motivation\n• Suivi des candidatures en temps reel\n• Acces a un espace de travail collaboratif\n• Gestion du calendrier et des taches\n\nPour les encadrants :\n• Publication et gestion de sujets PFE\n• Examen et traitement des candidatures\n• Suivi de l'avancement des projets\n\nPour les administrateurs :\n• Supervision globale de la plateforme\n• Validation des sujets proposes\n• Gestion des affectations et utilisateurs",
+      "SmartPFE est une plateforme numerique universitaire permettant :\n\nPour les etudiants :\n• Consultation et recherche de sujets PFE disponibles\n• Depot de candidatures avec CV et lettre de motivation\n• Suivi des candidatures en temps reel\n• Acces a un espace de travail collaboratif\n• Gestion du calendrier et des taches\n\nPour les encadrants :\n• Publication et gestion de sujets PFE\n• Examen et traitement des candidatures\n• Suivi de l'avancement des projets\n\nPour les administrateurs :\n• Supervision globale de la plateforme\n• Validation des sujets proposes\n• Gestion des affectations et utilisateurs",
   },
   {
     num: '03',
@@ -33,7 +33,7 @@ const SECTIONS = [
     num: '05',
     titre: 'Propriete intellectuelle',
     contenu:
-      "Droits de Project Finder : La plateforme, son design, son code source, ses algorithmes (notamment l'IA de matching) sont la propriete exclusive de Project Finder University, proteges par les lois sur la propriete intellectuelle.\n\nVos contenus : Vous conservez la propriete de vos contenus (CV, projets, messages). En les deposant, vous accordez a Project Finder une licence limitee pour les utiliser dans le cadre du service.\n\nInterdictions : Il est interdit de copier, reproduire ou exploiter commercialement les elements de la plateforme sans autorisation ecrite prealable.",
+      "Droits de SmartPFE : La plateforme, son design, son code source, ses algorithmes (notamment l'IA de matching) sont la propriete exclusive de SmartPFE University, proteges par les lois sur la propriete intellectuelle.\n\nVos contenus : Vous conservez la propriete de vos contenus (CV, projets, messages). En les deposant, vous accordez a SmartPFE une licence limitee pour les utiliser dans le cadre du service.\n\nInterdictions : Il est interdit de copier, reproduire ou exploiter commercialement les elements de la plateforme sans autorisation ecrite prealable.",
   },
   {
     num: '06',
@@ -45,13 +45,13 @@ const SECTIONS = [
     num: '07',
     titre: 'Limitation de responsabilite',
     contenu:
-      "Project Finder est fourni en l'etat. Nous ne garantissons pas :\n\n• La disponibilite continue et ininterrompue de la plateforme\n• L'adequation parfaite entre etudiants et encadrants\n• L'exactitude des informations publiees par les utilisateurs\n• L'absence totale de bugs ou d'erreurs techniques\n\nNotre responsabilite ne peut etre engagee pour les dommages indirects resultant de l'utilisation de la plateforme.",
+      "SmartPFE est fourni en l'etat. Nous ne garantissons pas :\n\n• La disponibilite continue et ininterrompue de la plateforme\n• L'adequation parfaite entre etudiants et encadrants\n• L'exactitude des informations publiees par les utilisateurs\n• L'absence totale de bugs ou d'erreurs techniques\n\nNotre responsabilite ne peut etre engagee pour les dommages indirects resultant de l'utilisation de la plateforme.",
   },
   {
     num: '08',
     titre: 'Suspension et resiliation',
     contenu:
-      "Par l'utilisateur : Suppression du compte possible depuis Parametres > Zone dangereuse.\n\nPar Project Finder : Nous pouvons suspendre ou supprimer tout compte en cas de :\n• Violation des presentes CGU\n• Comportement frauduleux ou abusif\n• Inactivite prolongee (plus de 2 ans)\n• Demande de l'administration universitaire\n\nConsequences : Vos donnees seront conservees selon les durees definies dans notre Politique de Confidentialite, puis supprimees.",
+      "Par l'utilisateur : Suppression du compte possible depuis Parametres > Zone dangereuse.\n\nPar SmartPFE : Nous pouvons suspendre ou supprimer tout compte en cas de :\n• Violation des presentes CGU\n• Comportement frauduleux ou abusif\n• Inactivite prolongee (plus de 2 ans)\n• Demande de l'administration universitaire\n\nConsequences : Vos donnees seront conservees selon les durees definies dans notre Politique de Confidentialite, puis supprimees.",
   },
   {
     num: '09',
@@ -63,7 +63,7 @@ const SECTIONS = [
     num: '10',
     titre: 'Contact',
     contenu:
-      'Pour toute question relative aux presentes CGU :\n\nEmail legal : legal@projectfinder.tn\nAdresse : Project Finder University, Avenue Habib Bourguiba, 1000 Tunis, Tunisie\nTelephone : +216 71 000 000\n\nHoraires de support : Lundi au Vendredi, 8h00 - 17h00',
+      'Pour toute question relative aux presentes CGU :\n\nEmail legal : legal@projectfinder.tn\nAdresse : SmartPFE University, Avenue Habib Bourguiba, 1000 Tunis, Tunisie\nTelephone : +216 71 000 000\n\nHoraires de support : Lundi au Vendredi, 8h00 - 17h00',
   },
 ];
 

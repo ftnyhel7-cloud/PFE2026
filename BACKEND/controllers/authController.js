@@ -1,8 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-//  BACKEND/controllers/authController.js
-//  Authentification JWT — Access Token + Refresh Token
-//  Rôles : ETUDIANT | ENCADRANT | ADMINISTRATEUR
-//  + Validation référentiel + Logs
+//  BACKEND/controllers/authController.js  ✅ CORRIGÉ
+//  Fix : popupNotifications retournées aussi dans refreshToken
 // ═══════════════════════════════════════════════════════════
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -16,7 +14,7 @@ const sendEmail = require('../utils/sendEmail');
 const { logAction, getClientIp } = require('../utils/logger');
 
 // ─────────────────────────────────────────────────────────
-//  HELPERS : génération des tokens
+//  HELPERS
 // ─────────────────────────────────────────────────────────
 const genAccessToken = (user) =>
   jwt.sign({ id: user._id, role: user.role, email: user.email }, process.env.JWT_SECRET, {
@@ -49,8 +47,18 @@ const formatUser = (user) => ({
   isValidated: user.isValidated,
 });
 
+// ── Helper partagé : récupère les popups non encore affichées ──
+const getPopupNotifications = async (userId) =>
+  Notification.find({
+    idUtilisateur: userId,
+    lu: false,
+    isPopupShown: false,
+  })
+    .sort({ createdAt: -1 })
+    .limit(10);
+
 // ─────────────────────────────────────────────────────────
-//  INSCRIPTION — avec vérification référentiel
+//  INSCRIPTION
 // ─────────────────────────────────────────────────────────
 exports.register = async (req, res) => {
   try {
@@ -97,12 +105,10 @@ exports.register = async (req, res) => {
 
     const rolesValides = ['ETUDIANT', 'ENCADRANT'];
     if (!rolesValides.includes(role)) {
-      return res
-        .status(400)
-        .json({
-          status: 'error',
-          message: 'Rôle invalide. Valeurs acceptées : ETUDIANT, ENCADRANT',
-        });
+      return res.status(400).json({
+        status: 'error',
+        message: 'Rôle invalide. Valeurs acceptées : ETUDIANT, ENCADRANT',
+      });
     }
 
     const codeAVerifier = codeReference || (role === 'ETUDIANT' ? matricule : matriculeProf);
@@ -185,9 +191,9 @@ exports.register = async (req, res) => {
 
     try {
       await sendEmail({
-        email: utilisateur.email,
-        subject: '[Project Finder] Bienvenue sur la plateforme !',
-        message: `Bonjour ${prenom} !\n\nVotre compte a été créé avec succès en tant que ${role}.\nVotre compte est actif. Vous pouvez vous connecter immédiatement.\n\nCordialement,\nL'équipe Project Finder`,
+        to: utilisateur.email,
+        subject: '[SmartPFE] Bienvenue sur la plateforme !',
+        text: `Bonjour ${prenom} !\n\nVotre compte a été créé avec succès en tant que ${role}.\nVotre compte est actif. Vous pouvez vous connecter immédiatement.\n\nCordialement,\nL'équipe SmartPFE`,
       });
     } catch (emailErr) {
       console.error('Email bienvenue non envoyé:', emailErr.message);
@@ -251,24 +257,15 @@ exports.login = async (req, res) => {
       ip: getClientIp(req),
     });
 
-    // ── Récupérer UNIQUEMENT les notifications dont la popup
-    //    n'a pas encore été affichée (isPopupShown: false)
-    //    → après affichage, le frontend marque isPopupShown: true
-    //    → elles ne réapparaîtront plus aux prochaines connexions
-    const notificationsNonLues = await Notification.find({
-      idUtilisateur: utilisateur._id,
-      lu: false,
-      isPopupShown: false, // ← SEUL CHANGEMENT PAR RAPPORT À L'ORIGINAL
-    })
-      .sort({ createdAt: -1 })
-      .limit(10);
+    // ── Notifications popup non encore affichées ──────────
+    const popupNotifications = await getPopupNotifications(utilisateur._id);
 
     return res.status(200).json({
       status: 'success',
       message: 'Connexion réussie',
       accessToken,
       user: formatUser(utilisateur),
-      popupNotifications: notificationsNonLues,
+      popupNotifications,
     });
   } catch (error) {
     console.error('Erreur login:', error);
@@ -280,15 +277,19 @@ exports.login = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────
 //  RAFRAÎCHIR LE TOKEN
+//  ✅ FIX : retourne aussi popupNotifications
+//  → sans ça, les notifications disparaissent après un refresh
+//    de page (silentRefresh dans AuthContext)
 // ─────────────────────────────────────────────────────────
 exports.refreshToken = async (req, res) => {
   try {
     const token = req.cookies?.refreshToken;
 
     if (!token) {
-      return res
-        .status(401)
-        .json({ status: 'error', message: 'Refresh token manquant — veuillez vous reconnecter' });
+      return res.status(401).json({
+        status: 'error',
+        message: 'Refresh token manquant — veuillez vous reconnecter',
+      });
     }
 
     let decoded;
@@ -324,9 +325,15 @@ exports.refreshToken = async (req, res) => {
 
     setRefreshCookie(res, newRefreshToken);
 
-    return res
-      .status(200)
-      .json({ status: 'success', accessToken: newAccessToken, user: formatUser(utilisateur) });
+    // ✅ FIX : récupérer les popups non affichées (même logique que login)
+    const popupNotifications = await getPopupNotifications(utilisateur._id);
+
+    return res.status(200).json({
+      status: 'success',
+      accessToken: newAccessToken,
+      user: formatUser(utilisateur),
+      popupNotifications, // ✅ AJOUT — manquait dans la version originale
+    });
   } catch (error) {
     console.error('Erreur refreshToken:', error);
     return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
@@ -436,12 +443,10 @@ exports.forgotPassword = async (req, res) => {
     const user = await Utilisateur.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
-      return res
-        .status(200)
-        .json({
-          status: 'success',
-          message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
-        });
+      return res.status(200).json({
+        status: 'success',
+        message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
+      });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -456,20 +461,18 @@ exports.forgotPassword = async (req, res) => {
 
     try {
       await sendEmail({
-        email: user.email,
-        subject: '[Project Finder] Réinitialisation de mot de passe',
-        message: `Bonjour ${user.prenom},\n\nUne demande de réinitialisation de mot de passe a été effectuée.\n\nCliquez sur ce lien (valable 30 minutes) :\n${resetUrl}\n\nSi vous n'avez pas fait cette demande, ignorez cet email.\n\nCordialement,\nL'équipe Project Finder`,
+        to: user.email,
+        subject: '[SmartPFE] Réinitialisation de mot de passe',
+        text: `Bonjour ${user.prenom},\n\nUne demande de réinitialisation de mot de passe a été effectuée.\n\nCliquez sur ce lien (valable 30 minutes) :\n${resetUrl}\n\nSi vous n'avez pas fait cette demande, ignorez cet email.\n\nCordialement,\nL'équipe SmartPFE`,
       });
     } catch (emailErr) {
       console.error('Email reset non envoyé:', emailErr.message);
     }
 
-    return res
-      .status(200)
-      .json({
-        status: 'success',
-        message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
-      });
+    return res.status(200).json({
+      status: 'success',
+      message: 'Si cet email existe, un lien de réinitialisation a été envoyé.',
+    });
   } catch (error) {
     return res.status(500).json({ status: 'error', message: 'Erreur serveur' });
   }

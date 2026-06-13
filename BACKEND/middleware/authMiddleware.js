@@ -49,6 +49,16 @@ exports.protect = async (req, res, next) => {
     }
 
     // ── Attacher l'utilisateur à la requête ──────────────
+    // ── Vérifier que le compte est actif ─────────────────
+    if (user.isActive === false) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'ACCOUNT_DISABLED',
+        message: "Votre compte a été désactivé. Contactez l'administration.",
+      });
+    }
+
+    // ── Attacher l'utilisateur à la requête ──────────────
     req.user = user;
     next();
   } catch (error) {

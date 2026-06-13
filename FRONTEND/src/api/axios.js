@@ -57,6 +57,26 @@ API.interceptors.response.use(
       return Promise.reject(error);
     }
 
+
+
+
+    // Si 403 compte désactivé → déconnexion forcée
+    if (error.response?.status === 403 && 
+        error.response?.data?.code === 'ACCOUNT_DISABLED') {
+      _logout?.();
+      window.location.href = '/login?disabled=true';
+      return Promise.reject(error);
+    }
+
+
+
+
+
+
+
+
+
+
     // Si 401 et pas déjà retentée
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

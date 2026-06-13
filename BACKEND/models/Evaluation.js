@@ -46,42 +46,20 @@ const EvaluationSchema = new mongoose.Schema(
 
 // ── Hook pre-save ─────────────────────────────────────────────
 EvaluationSchema.pre('save', function (next) {
-  try {
-    const PCT = [0, 0.25, 0.5, 0.75, 1.0];
-    const MAX_CRIT = {
-      assiduite: 4,
-      motivation: 4,
-      adaptation: 4,
-      travail_grp: 4,
-      initiative: 4,
-      niv_sci: 6,
-      expression: 6,
-      glob: 8,
-    };
-    const MAX_FICHE = 40;
+  console.log('🔁 pre-save | typeSaisie:', this.typeSaisie, '| next type:', typeof next);
+  // Pour la fiche, le calcul est déjà fait dans le controller
+  
+  if (this.typeSaisie === 'fiche') return next();
 
-    if (this.typeSaisie === 'fiche' && this.fiche) {
-      let total = 0;
-      for (const [key, max] of Object.entries(MAX_CRIT)) {
-        const col = this.fiche[key]?.col;
-        if (col !== null && col !== undefined) {
-          const pts = Math.round(max * PCT[col]);
-          this.fiche[key] = { col, pts };
-          total += pts;
-        }
-      }
-      this.totalFiche = total;
-      this.note = parseFloat(((total / MAX_FICHE) * 20).toFixed(2));
-    } else {
-      const c = this.criteres || {};
-      this.note =
-        (c.travailRealise || 0) +
-        (c.qualiteTechnique || 0) +
-        (c.autonomie || 0) +
-        (c.respectDelais || 0) +
-        (c.qualiteRedaction || 0) +
-        (c.aptitudesRelationnelles || 0);
-    }
+  try {
+    const c = this.criteres || {};
+    this.note =
+      (c.travailRealise || 0) +
+      (c.qualiteTechnique || 0) +
+      (c.autonomie || 0) +
+      (c.respectDelais || 0) +
+      (c.qualiteRedaction || 0) +
+      (c.aptitudesRelationnelles || 0);
 
     const n = this.note || 0;
     if (n >= 18) this.mention = 'Excellent';
@@ -91,9 +69,9 @@ EvaluationSchema.pre('save', function (next) {
     else if (n >= 10) this.mention = 'Passable';
     else this.mention = 'Insuffisant';
 
-    next();
+    return next();
   } catch (err) {
-    next(err);
+    return next(err);
   }
 });
 

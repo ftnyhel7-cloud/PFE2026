@@ -1,34 +1,40 @@
 // ═══════════════════════════════════════════════════════════
 //  BACKEND/controllers/messagerieController.js
-//  Messagerie sécurisée — affectation via Projet
-//  Étudiant ↔ son encadrant uniquement
+//  Messagerie sécurisée — Pusher remplace Socket.IO
 // ═══════════════════════════════════════════════════════════
-const Messagerie  = require('../models/Messagerie');
-const Projet      = require('../models/Projet');
-const Etudiant    = require('../models/Etudiant');
-const Encadrant   = require('../models/Encadrant');
+const Messagerie = require('../models/Messagerie');
+const Projet = require('../models/Projet');
+const Etudiant = require('../models/Etudiant');
+const Encadrant = require('../models/Encadrant');
 const Utilisateur = require('../models/Utilisateur');
+const Pusher = require('pusher');
+
+// ── Init Pusher ───────────────────────────────────────────
+const pusher = new Pusher({
+  appId: process.env.PUSHER_APP_ID,
+  key: process.env.PUSHER_KEY,
+  secret: process.env.PUSHER_SECRET,
+  cluster: process.env.PUSHER_CLUSTER,
+  useTLS: true,
+});
 
 // ── Helper : résoudre l'interlocuteur autorisé ────────────
-// Vérifie que la conversation est autorisée selon l'affectation
 async function getInterlocuteurAutorise(userId, role, targetUserId) {
   if (role === 'ETUDIANT') {
-    // L'étudiant ne peut parler qu'avec son encadrant
     const etudiant = await Etudiant.findOne({ utilisateur: userId });
     if (!etudiant) throw new Error('Profil étudiant introuvable');
 
-    const projet = await Projet.findOne({ idEtudiant: etudiant._id })
-      .populate({ path: 'idEncadrant', populate: { path: 'utilisateur', select: 'nom prenom image role email' } });
+    const projet = await Projet.findOne({ idEtudiant: etudiant._id }).populate({
+      path: 'idEncadrant',
+      populate: { path: 'utilisateur', select: 'nom prenom image role email' },
+    });
 
     if (!projet) throw new Error('Aucun projet affecté');
     if (!projet.idEncadrant) throw new Error('Aucun encadrant affecté');
 
     const encadrantUserId = projet.idEncadrant.utilisateur?._id?.toString();
-
-    // Si targetUserId fourni, vérifier que c'est bien son encadrant
-    if (targetUserId && encadrantUserId !== targetUserId.toString()) {
+    if (targetUserId && encadrantUserId !== targetUserId.toString())
       throw new Error('Accès non autorisé à cette conversation');
-    }
 
     return {
       interlocuteur: projet.idEncadrant.utilisateur,
@@ -38,12 +44,13 @@ async function getInterlocuteurAutorise(userId, role, targetUserId) {
   }
 
   if (role === 'ENCADRANT') {
-    // L'encadrant ne peut parler qu'avec ses étudiants assignés
     const encadrant = await Encadrant.findOne({ utilisateur: userId });
     if (!encadrant) throw new Error('Profil encadrant introuvable');
 
     if (targetUserId) {
-      const etudiantUser = await Utilisateur.findById(targetUserId).select('nom prenom image role email');
+      const etudiantUser = await Utilisateur.findById(targetUserId).select(
+        'nom prenom image role email'
+      );
       if (!etudiantUser) throw new Error('Étudiant introuvable');
 
       const etudiantDoc = await Etudiant.findOne({ utilisateur: targetUserId });
@@ -51,9 +58,9 @@ async function getInterlocuteurAutorise(userId, role, targetUserId) {
 
       const projet = await Projet.findOne({
         idEncadrant: encadrant._id,
-        idEtudiant:  etudiantDoc._id,
+        idEtudiant: etudiantDoc._id,
       });
-      if (!projet) throw new Error('Cet étudiant n\'est pas dans vos étudiants assignés');
+      if (!projet) throw new Error("Cet étudiant n'est pas dans vos étudiants assignés");
 
       return { interlocuteur: etudiantUser, interlocuteurUserId: targetUserId, projet };
     }
@@ -63,20 +70,17 @@ async function getInterlocuteurAutorise(userId, role, targetUserId) {
   throw new Error('Rôle non autorisé');
 }
 
-// ─── GET /messagerie/mon-encadrant (étudiant) ────────────
+// ─── GET /messagerie/mon-encadrant ───────────────────────
 exports.getMonEncadrant = async (req, res) => {
   try {
     const result = await getInterlocuteurAutorise(req.user._id, req.user.role);
-    return res.json({
-      encadrant: result.interlocuteur,
-      projet:    result.projet,
-    });
+    return res.json({ encadrant: result.interlocuteur, projet: result.projet });
   } catch (err) {
     return res.status(400).json({ message: err.message });
   }
 };
 
-// ─── GET /messagerie/mes-etudiants (encadrant) ───────────
+// ─── GET /messagerie/mes-etudiants ───────────────────────
 exports.getMesEtudiants = async (req, res) => {
   try {
     const encadrant = await Encadrant.findOne({ utilisateur: req.user._id });
@@ -84,36 +88,35 @@ exports.getMesEtudiants = async (req, res) => {
 
     const projets = await Projet.find({ idEncadrant: encadrant._id })
       .populate({
-        path:     'idEtudiant',
+        path: 'idEtudiant',
         populate: { path: 'utilisateur', select: 'nom prenom image email role' },
       })
       .populate('idSujet', 'titre');
 
-    // Pour chaque étudiant, compter les non lus
     const etudiants = await Promise.all(
-      projets.map(async p => {
+      projets.map(async (p) => {
         const etudiantUserId = p.idEtudiant?.utilisateur?._id;
-        const nonLus = etudiantUserId ? await Messagerie.countDocuments({
-          idExpediteur:   etudiantUserId,
-          idDestinataire: req.user._id,
-          lu: false,
-        }) : 0;
-
+        const nonLus = etudiantUserId
+          ? await Messagerie.countDocuments({
+              idExpediteur: etudiantUserId,
+              idDestinataire: req.user._id,
+              lu: false,
+            })
+          : 0;
         return {
-          userId:    etudiantUserId,
-          prenom:    p.idEtudiant?.utilisateur?.prenom,
-          nom:       p.idEtudiant?.utilisateur?.nom,
-          image:     p.idEtudiant?.utilisateur?.image,
-          email:     p.idEtudiant?.utilisateur?.email,
+          userId: etudiantUserId,
+          prenom: p.idEtudiant?.utilisateur?.prenom,
+          nom: p.idEtudiant?.utilisateur?.nom,
+          image: p.idEtudiant?.utilisateur?.image,
+          email: p.idEtudiant?.utilisateur?.email,
           matricule: p.idEtudiant?.matricule,
-          sujetTitre:p.idSujet?.titre,
-          projetId:  p._id,
+          sujetTitre: p.idSujet?.titre,
+          projetId: p._id,
           nonLus,
         };
       })
     );
-
-    return res.json(etudiants.filter(e => e.userId));
+    return res.json(etudiants.filter((e) => e.userId));
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -123,26 +126,24 @@ exports.getMesEtudiants = async (req, res) => {
 exports.getConversation = async (req, res) => {
   try {
     const { userId } = req.params;
-    const page  = parseInt(req.query.page)  || 1;
+    const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
-    const skip  = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-    // Vérifier que la conversation est autorisée
     await getInterlocuteurAutorise(req.user._id, req.user.role, userId);
 
     const messages = await Messagerie.find({
       $or: [
         { idExpediteur: req.user._id, idDestinataire: userId },
-        { idExpediteur: userId,        idDestinataire: req.user._id },
+        { idExpediteur: userId, idDestinataire: req.user._id },
       ],
     })
-      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idExpediteur', 'nom prenom image role')
       .populate('idDestinataire', 'nom prenom image role')
       .sort({ createdAt: 1 })
       .skip(skip)
       .limit(limit);
 
-    // Marquer comme lus automatiquement
     await Messagerie.updateMany(
       { idExpediteur: userId, idDestinataire: req.user._id, lu: false },
       { lu: true }
@@ -154,32 +155,31 @@ exports.getConversation = async (req, res) => {
   }
 };
 
-// ─── POST /messagerie ────────────────────────────────────
+// ─── POST /messagerie ─────────────────────────────────────
 exports.envoyerMessage = async (req, res) => {
   try {
     const { idDestinataire, contenu } = req.body;
-    if (!idDestinataire || !contenu?.trim()) {
+    if (!idDestinataire || !contenu?.trim())
       return res.status(400).json({ message: 'Destinataire et contenu requis' });
-    }
 
-    // Vérifier autorisation
     await getInterlocuteurAutorise(req.user._id, req.user.role, idDestinataire);
 
     const message = await Messagerie.create({
-      idExpediteur:   req.user._id,
+      idExpediteur: req.user._id,
       idDestinataire,
       contenu: contenu.trim(),
     });
 
     const populated = await Messagerie.findById(message._id)
-      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idExpediteur', 'nom prenom image role')
       .populate('idDestinataire', 'nom prenom image role');
 
-    // Émettre via Socket.IO au destinataire
-    const io = req.app.get('io');
-    if (io) {
-      io.to(idDestinataire.toString()).emit('nouveau_message', populated);
-    }
+    // ✅ Pusher remplace io.to(userId).emit()
+    await pusher.trigger(
+      `private-chat-${idDestinataire.toString()}`, // channel du destinataire
+      'nouveau_message',
+      populated.toObject()
+    );
 
     return res.status(201).json(populated);
   } catch (err) {
@@ -187,40 +187,50 @@ exports.envoyerMessage = async (req, res) => {
   }
 };
 
+// ─── POST /messagerie/typing ──────────────────────────────
+// Nouvelle route pour le typing indicator via Pusher
+exports.sendTyping = async (req, res) => {
+  try {
+    const { toUserId, isTyping } = req.body;
+    await pusher.trigger(`private-chat-${toUserId}`, isTyping ? 'typing' : 'stop_typing', {
+      fromUserId: req.user._id.toString(),
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 // ─── GET /messagerie/non-lus ─────────────────────────────
 exports.messagesNonLus = async (req, res) => {
   try {
-    const count = await Messagerie.countDocuments({
-      idDestinataire: req.user._id,
-      lu: false,
-    });
+    const count = await Messagerie.countDocuments({ idDestinataire: req.user._id, lu: false });
     return res.json({ messagesNonLus: count });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 };
 
-// ─── GET /messagerie (liste conversations) ───────────────
+// ─── GET /messagerie ─────────────────────────────────────
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.user._id.toString();
-
     const messages = await Messagerie.find({
       $or: [{ idExpediteur: req.user._id }, { idDestinataire: req.user._id }],
     })
-      .populate('idExpediteur',   'nom prenom image role')
+      .populate('idExpediteur', 'nom prenom image role')
       .populate('idDestinataire', 'nom prenom image role')
       .sort({ createdAt: -1 });
 
     const map = new Map();
     for (const msg of messages) {
-      const autre = msg.idExpediteur?._id?.toString() === userId
-        ? msg.idDestinataire : msg.idExpediteur;
+      const autre =
+        msg.idExpediteur?._id?.toString() === userId ? msg.idDestinataire : msg.idExpediteur;
       if (!autre) continue;
       const autreId = autre._id.toString();
       if (!map.has(autreId)) {
         const nonLus = await Messagerie.countDocuments({
-          idExpediteur:   autre._id,
+          idExpediteur: autre._id,
           idDestinataire: req.user._id,
           lu: false,
         });

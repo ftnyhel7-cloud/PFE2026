@@ -12,6 +12,11 @@ const sujetSchema = new mongoose.Schema(
     reference: String,
     technologies: [String],
     valide: { type: Boolean, default: false },
+
+    // ── Délai de postulation contrôlé par admin ────────────
+    dateDebutPostulation: { type: Date, default: null },
+    dateFinPostulation: { type: Date, default: null },
+    maxCandidatsInterview: { type: Number, default: 5 },
   },
   { timestamps: true }
 );

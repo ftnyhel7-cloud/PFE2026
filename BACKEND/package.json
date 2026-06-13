@@ -10,6 +10,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@cyber2024/pdf-parse-fixed": "^1.2.5",
+    "axios": "^1.17.0",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
     "cookie-parser": "^1.4.7",
@@ -22,7 +24,11 @@
     "mongoose": "^9.4.1",
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
-    "nodemailer": "^8.0.4",
+    "nodemailer": "^8.0.7",
+    "nodemailer-brevo-transport": "^2.2.1",
+    "pdf-text-extract": "^1.5.0",
+    "pusher": "^5.3.3",
+    "resend": "^6.12.3",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {

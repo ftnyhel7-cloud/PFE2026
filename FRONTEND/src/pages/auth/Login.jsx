@@ -67,6 +67,7 @@ export default function Login() {
   };
 
   const [notValidated, setNotValidated] = useState(false);
+  const isDisabled = new URLSearchParams(window.location.search).get('disabled');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -345,6 +346,26 @@ export default function Login() {
             <p style={{ color: '#64748b', fontSize: '.9rem' }}>Connectez-vous à votre espace PFE</p>
           </div>
 
+          {/* Compte désactivé */}
+          {isDisabled && (
+            <div
+              style={{
+                marginBottom: '1.25rem',
+                padding: '.82rem 1rem',
+                borderRadius: 9,
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                fontSize: '.86rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.5rem',
+              }}
+            >
+              <span>🚫</span> Votre compte a été désactivé. Contactez l'administration.
+            </div>
+          )}
+
           {/* Erreur serveur */}
           {serverErr && !notValidated && (
             <div
@@ -378,7 +399,15 @@ export default function Login() {
                 fontSize: '.86rem',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.4rem', fontWeight: 700 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '.5rem',
+                  marginBottom: '.4rem',
+                  fontWeight: 700,
+                }}
+              >
                 <span>⏳</span> Compte en attente de validation
               </div>
               <p style={{ fontSize: '.8rem', lineHeight: 1.5, margin: 0 }}>
