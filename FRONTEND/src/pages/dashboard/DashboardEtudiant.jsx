@@ -7017,7 +7017,7 @@ function InterfaceSujets({ user, logout, navigate, profilExtra, sujets, candidat
             { id: 'sujets', icon: I.news, label: 'Sujets PFE', nav: false },
             { id: 'candidatures', icon: I.send, label: 'Candidatures', nav: false },
             { id: 'guide', icon: I.book, label: 'Guide PFE', nav: true, path: '/guide-pfe' },
-            { id: 'profil', icon: I.user, label: 'Mon profil', nav: false },
+            { id: 'profil', icon: I.user, label: 'Mon profil', nav: true, path: '/profil' },
           ].map((t) => (
             <button
               key={t.id}
